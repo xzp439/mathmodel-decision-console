@@ -415,6 +415,65 @@ body { min-width:1280px; }
 .ai-result-body ul { padding-left: 20px; margin: 4px 0; }
 .ai-result-body li { margin-bottom: 4px; }
 
+.ai-execute-btn {
+  padding: 8px 16px;
+  font-size: 12px;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--accent), #fbbf24);
+  color: #000;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: var(--sans);
+  transition: all 0.15s;
+}
+.ai-execute-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(245,158,11,0.3);
+}
+.ai-execute-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.gate-ai-result {
+  margin-top: 16px;
+  padding: 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.gate-ai-result-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.gate-ai-result-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.gate-ai-result-actions {
+  display: flex;
+  gap: 6px;
+}
+.gate-ai-result-body {
+  font-size: 12px;
+  line-height: 1.8;
+  color: var(--text-primary);
+  max-height: 400px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* Splash / Welcome Screen */
 .splash-screen {
   position: fixed;
@@ -1989,6 +2048,434 @@ function applyAiToG1(silent) {
   }
 }
 
+// ===== Gate AI Execution (Skill Integration) =====
+const gatePromptTemplates = {
+  g1: (problemText) => `你是一位资深数学建模竞赛教练，正在执行 problem-parser + problem-classifier skill。
+
+请仔细阅读以下竞赛题目，按problem-parser的标准工作流程完成结构化解析。
+
+题目内容：
+${problemText.slice(0, 15000)}
+
+请严格按以下格式输出（使用Markdown）：
+
+## 一、问题五要素提取
+- **goal（目标）**：需要实现或解释什么
+- **object（对象）**：研究的实体、系统、过程或决策是什么
+- **constraints（约束）**：显式和隐式的限制条件
+- **data（数据）**：已提供的数据、缺失的数据、可能的数据来源、单位
+- **output（输出）**：需要提交的排名、预测、决策、图表、解释或建议
+
+## 二、子问题拆解
+将题目拆解为Q1、Q2、Q3...，每个子问题说明：
+- 子问题描述
+- 输入和预期输出
+- 关键约束
+- 依赖关系（是否依赖前一个子问题的结果）
+- [MODELER INPUT NEEDED] 评价标准占位（用团队的话说明什么算好答案，AI不编造评分标准）
+
+## 三、问题类型分类
+判断每个子问题属于：优化类、评价类、预测类、分类类、机理分析类、统计分析类、图论/网络类、微分方程类、其他。说明分类理由。
+
+## 四、初步变量与关系
+- 可观测变量列表
+- 可控变量列表（如果是决策类问题）
+- 外部参数列表
+- [AI-DRAFT — modeler must confirm] 初步关系、守恒约束、趋势或因果提示（每条都标注待人类确认）
+
+## 五、歧义与风险
+- 模糊表述
+- 缺失数据
+- 单位不一致
+- 隐含假设
+- 竞赛规则风险（如外部数据依赖）
+
+## 六、整体解题思路
+用3-5句话概括整体技术路线和各子问题之间的逻辑关系。`,
+
+  g2: (context) => `你是一位资深数学建模教练，正在执行 method-selector + related-paper-analyzer skill。
+
+基于以下问题解析结果，为每个子问题生成2-4个候选建模方案。
+
+问题解析上下文：
+${context}
+
+请严格按以下格式输出：
+
+## 候选方法池
+对每个子问题（Q1、Q2...），给出2-4个候选方案：
+
+### QX 候选方案
+1. **方案名称**
+   - 适用理由
+   - 核心思路
+   - 预计复杂度（低/中/高）
+   - 优缺点
+   - PoC验证要点（≤30行代码能验证什么）
+
+2. ...
+
+## 量化对比维度
+说明每个候选方案应在哪些指标上对比（如RMSE、MAPE、AIC、运行时间、可解释性、稳健性等）。
+
+## 推荐与风险
+- 初步推荐哪个方案作为主方法
+- 哪个作为备选/验证方法
+- 可能的失败风险和应对方案`,
+
+  g25: (context) => `你是一位资深数学建模教练，正在执行 method-selector 最终选择阶段。
+
+基于以下候选方法PoC结果，给出最终方法选择建议。
+
+候选方法与PoC结果：
+${context}
+
+请输出：
+## 最终推荐
+- 主方法：[名称] — 选择理由（必须用具体数字支撑）
+- 备选方法：[名称] — 适用场景
+- 淘汰方法：[名称] — 淘汰理由
+
+## 量化对比表
+| 方法 | 指标1 | 指标2 | 运行时间 | 稳健性 | 可解释性 | 综合评分 |
+|---|---|---|---|---|---|---|
+
+## 选择理由
+用3-5句话说明为什么选这个方法，关键权衡是什么。`,
+
+  g3: (context) => `你是一位资深代码审查专家，正在执行 code-reviewer skill。
+
+请对以下数学建模代码进行审查，生成审查报告。
+
+代码上下文：
+${context}
+
+请输出：
+## 代码审查报告
+### 检查项（每项引用具体位置 file:line）
+1. **可复现性**：随机种子是否固定？SEED是否一致？
+2. **边界条件**：输入边界、除零、空值处理
+3. **数值稳定性**：大数/小数运算、矩阵条件数、迭代收敛
+4. **不等式约束方向**：列出所有不等式约束及方向（≥/≤），供人类核对
+5. **代码效率**：不必要的循环、内存泄漏、可向量化操作
+6. **注释与可读性**：关键步骤是否有注释？变量命名是否清晰？
+
+### 问题清单
+- [严重] 问题描述 + 位置 + 修复建议
+- [警告] ...
+- [建议] ...
+
+### 不等式约束方向表
+| 约束编号 | 约束表达式 | 方向 | 来源 | 待核对 |
+|---|---|---|---|---|`,
+
+  g45: (context) => `你是一位资深数学建模教练，正在执行 result-report-generator + robustness-checker skill。
+
+基于以下模型运行结果，生成结果报告和稳健性分析。
+
+结果上下文：
+${context}
+
+请输出：
+## 结果报告
+### 关键结果数字
+- 主要指标值（精确到合理位数）
+- 对比基准的提升/降低百分比
+- 各子问题结果摘要
+
+### 结果可视化建议
+- 应该画哪些图（对比曲线、敏感性分析、残差图、参数空间等）
+- 每张图的横纵轴和关键标注
+
+## 稳健性检验
+### 参数敏感性
+- 单参数±20%扰动下结果变化范围
+- 最敏感的参数TOP3
+- 是否存在单一参数主导的脆弱性
+
+### 初始值稳健性
+- 多组随机初始值是否收敛到同一解
+- 收敛速度和稳定性
+
+### 方法标签建议
+- [CHOSEN] 主方法：稳健性评级（high/medium/needs_caution）
+- [BACKUP] 备选方法：稳健性评级
+- [REJECTED] 淘汰方法：原因`,
+
+  g4: (context) => `你是一位资深数学建模教练，正在执行 solution-package-builder skill。
+
+请整合以下所有内容，生成最终解决方案包和frozen_numbers.json草稿。
+
+上下文：
+${context}
+
+请输出：
+## 解决方案包
+### 方法说明
+- 最终选择的方法及理由
+- 关键假设和符号定义
+- 求解步骤（算法流程）
+
+### 结果分析
+- 关键结果数字（23个左右核心数字）
+- 结果解释和机理分析
+- 与基准/文献的对比
+
+### 稳健性结论
+- 参数敏感性结论
+- 初始值稳健性结论
+- 局限性和外推风险
+
+## frozen_numbers.json 草稿
+列出所有需要冻结的关键数字（编号、名称、值、单位、来源），确保论文中所有数字与此一致。`,
+
+  g5: (context) => `你是一位资深学术论文写作教练，正在执行 paper-section-writer + paper-polisher skill。
+
+基于以下建模结果，撰写论文章节草稿。
+
+上下文：
+${context}
+
+请输出：
+## 论文章节草稿
+### 摘要
+- 背景（1-2句）
+- 方法（2-3句，突出创新点）
+- 结果（2-3句，带关键数字）
+- 结论（1句）
+- 建议标题：[待确认]
+
+### 问题重述与分析
+- 问题背景
+- 子问题拆解
+- 问题类型分类
+
+### 模型建立与求解
+- 假设与符号
+- 模型推导（配合公式）
+- 求解算法
+- 注意：每个公式后必须解释物理/领域含义
+
+### 结果分析
+- 关键结果展示
+- 机理解释（为什么会出现这个结果）
+- 敏感性分析
+- 与文献/基准对比
+
+### 结论与展望
+- 主要结论
+- 模型局限性
+- 改进方向
+
+## 高风险框架声明确认
+1. **摘要标题**：建议标题 + 理由
+2. **方法选择叙事**：如何突出"为什么选这个方法"
+3. **结论措辞**：避免"全局最优"等过满表述，建议软化方式`,
+
+  g6: (context) => `你是一位资深质量审计专家，正在执行 completeness-auditor + consistency-auditor + quality-assurance-auditor skill。
+
+请对以下完整数学建模解决方案进行最终审计。
+
+解决方案上下文：
+${context}
+
+请输出：
+## 最终审计报告
+### 1. completeness-auditor（完整性审计）
+检查项（每项PASS/FAIL + 证据）：
+- 所有review文件是否存在且≥5项检查
+- 所有子问题是否有对应模型和结果
+- 图表数量是否充足（≥6张）
+- 参考文献是否≥10篇且真实可追溯
+- 摘要、问题重述、模型、结果、结论是否齐全
+- 字数是否达标（正文≥8000字）
+
+### 2. consistency-auditor（一致性审计）
+检查项：
+- 论文中所有数字是否与frozen_numbers.json一致（逐项核对）
+- 符号表是否与正文一致
+- 图题与正文描述是否一致
+- 是否存在rationale-laundering（用AI生成的理由冒充人类判断）
+- 单位是否全文统一
+
+### 3. quality-assurance-auditor（质量审计）
+检查项：
+- 工作流是否完整（8个Gate全部通过）
+- 3条核心规则是否通过（恰好3候选、PoC全部通过、量化对比表）
+- 是否存在伪造引用或数据
+- 模型假设是否合理且有依据
+- 结果是否有敏感性分析支撑
+- 结论是否与结果一致（不过度推广）
+
+### 审计结论
+- 总体评级：PASS / NEEDS_REVISION / FAIL
+- 阻塞性问题列表（必须修复才能提交）
+- 改进建议（非阻塞）`
+};
+
+let gateAIExecuting = false;
+
+async function executeGateAI(gateId) {
+  if (gateAIExecuting) {
+    showToast('warning', '已有AI任务正在执行，请稍候');
+    return;
+  }
+  
+  // Check settings
+  if (!aiSettings.apiKey) {
+    loadAiSettings();
+    if (!aiSettings.apiKey) {
+      showToast('warning', '请先在顶部栏「⚙️ AI」中配置API Key');
+      openAiSettings();
+      return;
+    }
+  }
+  
+  const g = gates[gateId];
+  const template = gatePromptTemplates[gateId];
+  
+  if (!template) {
+    showToast('warning', `Gate ${gateId} 暂不支持AI执行`);
+    return;
+  }
+  
+  // Build context
+  let context = '';
+  
+  if (gateId === 'g1') {
+    // For G1, extract problem text from files
+    const files = await getAllFiles();
+    const problemFiles = files.filter(f => f.category === 'problem' && (f.type === 'application/pdf' || f.name.endsWith('.pdf')));
+    
+    if (problemFiles.length === 0) {
+      showToast('warning', '请先在文件库上传比赛题目PDF');
+      return;
+    }
+    
+    showToast('info', '正在提取题目文本...');
+    
+    // Extract text from all problem files
+    for (const f of problemFiles) {
+      try {
+        const arrayBuffer = await f.blob.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        let fileText = `\n\n========== 文件：${f.name} ==========\n`;
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const textContent = await page.getTextContent();
+          fileText += textContent.items.map(item => item.str).join(' ');
+        }
+        context += fileText;
+      } catch (err) {
+        console.error('Error extracting', f.name, err);
+      }
+    }
+    
+    if (!context.trim()) {
+      showToast('warning', '题目文本提取失败，可能是扫描件PDF');
+      return;
+    }
+  } else {
+    // For other gates, use previous gate results as context
+    const prevResults = [];
+    for (const id of gateOrder) {
+      if (state[id] && state[id].aiResult) {
+        prevResults.push(`### ${gates[id].label} ${gates[id].name} 结果\n${state[id].aiResult.slice(0, 2000)}`);
+      }
+      if (id === gateId) break;
+    }
+    context = prevResults.length > 0 ? prevResults.join('\n\n') : '（暂无前置Gate结果，请先执行前面的Gate）';
+    
+    // Also include problem text if available
+    if (state['g1'] && state['g1'].aiResult) {
+      context += `\n\n### 问题解析参考\n${state['g1'].aiResult.slice(0, 1500)}`;
+    }
+  }
+  
+  // Show loading
+  gateAIExecuting = true;
+  const btn = document.querySelector('.ai-execute-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ AI执行中...'; }
+  
+  showToast('info', `AI正在执行 ${g.label} ${g.name}（${g.skills}）...`);
+  
+  try {
+    const prompt = template(context);
+    
+    const response = await fetch(`${aiSettings.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${aiSettings.apiKey}`
+      },
+      body: JSON.stringify({
+        model: aiSettings.model,
+        messages: [
+          { role: 'system', content: '你是一位资深数学建模竞赛教练和质量审计专家。输出要求结构化、条理清晰、可操作性强，所有结论必须有具体数字或证据支撑。' },
+          { role: 'user', content: prompt }
+        ],
+        temperature: 0.7,
+        max_tokens: 6000
+      })
+    });
+    
+    if (!response.ok) {
+      const err = await response.text();
+      throw new Error(`API错误 ${response.status}：${err.slice(0, 200)}`);
+    }
+    
+    const data = await response.json();
+    const result = data.choices[0].message.content;
+    
+    // Save result to gate state
+    state[gateId].aiResult = result;
+    state[gateId].aiGeneratedAt = Date.now();
+    saveState();
+    
+    // Update gate's aiSuggestion with a summary
+    const summary = result.slice(0, 300) + (result.length > 300 ? '...' : '');
+    g.aiSuggestion = summary;
+    
+    showToast('success', `${g.label} ${g.name} AI执行完成！`);
+    renderDetail();
+    
+  } catch (err) {
+    console.error('Gate AI execution error:', err);
+    showToast('warning', `执行失败：${err.message}`);
+  } finally {
+    gateAIExecuting = false;
+    if (btn) { btn.disabled = false; btn.textContent = '🤖 AI执行'; }
+  }
+}
+
+function toggleAiResult() {
+  const full = document.getElementById('ai-result-full');
+  const preview = document.getElementById('ai-result-preview');
+  if (full && preview) {
+    const isHidden = full.style.display === 'none';
+    full.style.display = isHidden ? 'block' : 'none';
+    preview.style.display = isHidden ? 'none' : 'block';
+    const btn = event.target;
+    btn.textContent = isHidden ? '收起 ▲' : '展开全文 ▼';
+  }
+}
+
+function copyGateResult(gateId) {
+  const result = state[gateId] && state[gateId].aiResult;
+  if (!result) { showToast('warning', '暂无AI执行结果'); return; }
+  navigator.clipboard.writeText(result).then(() => {
+    showToast('success', 'AI结果已复制');
+  }).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = result;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+    showToast('success', 'AI结果已复制');
+  });
+}
+
 // ===== Theme & Visual Enhancements =====
 let currentTheme = localStorage.getItem('theme') || 'dark';
 
@@ -2290,6 +2777,7 @@ function renderDetail() {
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;">
         <span class="status-badge ${statusClass}">${statusText}</span>
+        <button class="ai-execute-btn" onclick="executeGateAI('${selectedGate}')" title="调用AI + ${g.skills} 执行本Gate">🤖 AI执行</button>
         ${undoBtn}
       </div>
     </div>
@@ -2314,8 +2802,27 @@ function renderDetail() {
         </div>
       </div>
       <div class="ai-suggestion">
-        <div class="suggestion-label">AI 建议 [AI-SUGGESTED — not a verdict]</div>
-        <div class="suggestion-text">${g.aiSuggestion}</div>
+        <div class="suggestion-label" style="display:flex;justify-content:space-between;align-items:center;">
+          <span>AI 执行结果 [${g.skills}]</span>
+          ${st.aiResult ? `<span style="font-size:10px;color:var(--text-muted);font-family:var(--mono);">${new Date(st.aiGeneratedAt).toLocaleTimeString()} · ${st.aiResult.length}字</span>` : ''}
+        </div>
+        ${st.aiResult ? `
+          <div class="gate-ai-result" style="margin-top:8px;padding:12px;">
+            <div class="gate-ai-result-body" id="ai-result-full" style="display:none;max-height:400px;overflow-y:auto;">${renderMarkdown(st.aiResult)}</div>
+            <div class="gate-ai-result-body" id="ai-result-preview" style="max-height:120px;overflow:hidden;position:relative;">
+              ${renderMarkdown(st.aiResult.slice(0, 500))}
+              <div style="position:absolute;bottom:0;left:0;right:0;height:40px;background:linear-gradient(transparent,var(--bg-card));pointer-events:none;"></div>
+            </div>
+            <div style="margin-top:8px;display:flex;gap:8px;">
+              <button class="ai-btn" style="padding:4px 12px;font-size:11px;" onclick="toggleAiResult()">${st.aiResult.length > 500 ? '展开全文 ▼' : '收起 ▲'}</button>
+              <button class="ai-btn" style="padding:4px 12px;font-size:11px;" onclick="copyGateResult('${selectedGate}')">📋 复制</button>
+              <button class="ai-btn" style="padding:4px 12px;font-size:11px;" onclick="executeGateAI('${selectedGate}')">🔄 重新生成</button>
+            </div>
+          </div>
+        ` : `
+          <div class="suggestion-text">${g.aiSuggestion}</div>
+          <div style="margin-top:8px;font-size:11px;color:var(--text-muted);">点击右上角「🤖 AI执行」按钮，调用 ${g.skills} 生成完整结果</div>
+        `}
       </div>
       ${candidatesHtml}
       <div class="verdict-section">
