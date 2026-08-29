@@ -1193,10 +1193,16 @@ body { min-width:1280px; }
           <span id="model-config-toggle">▶</span> 🤖 按Agent角色配置不同模型（可选）
         </label>
         <div id="agent-model-config" style="display:none;margin-top:10px;padding:12px;background:var(--bg-deep);border-radius:8px;">
-          <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">为不同Agent角色配置专用模型，留空则使用默认模型。简单任务可用轻量模型，复杂推理建议用强模型。</div>
+          <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;">
+            <button class="ai-btn" style="padding:4px 10px;font-size:11px;" onclick="applyPreset('all-cloud')">☁️ 全云端</button>
+            <button class="ai-btn" style="padding:4px 10px;font-size:11px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;border-color:#10b981;" onclick="applyPreset('hybrid')">⚡ 混合模式(推荐)</button>
+            <button class="ai-btn" style="padding:4px 10px;font-size:11px;" onclick="applyPreset('all-local')">🏠 全本地</button>
+            <button class="ai-btn" style="padding:4px 10px;font-size:11px;" onclick="applyPreset('clear')">🗑️ 清空</button>
+          </div>
+          <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">为不同Agent角色配置专用模型，留空则使用默认模型。简单任务可用本地轻量模型，复杂推理建议用云端强模型。</div>
           <div id="agent-model-list"></div>
           <div style="margin-top:8px;font-size:10px;color:var(--text-muted);">
-            推荐：问题分析师/程序员→轻量模型；建模专家/结果分析师→强模型；评论家→平衡模型
+            推荐：问题分析师/审计员→本地轻量；建模/结果分析/写作→云端强模型；评论家→云端（质量把关）
           </div>
         </div>
       </div>
@@ -2097,6 +2103,77 @@ function renderAgentModelConfig() {
       </div>
     `;
   }).join('');
+}
+
+// Preset configurations for agent models
+const modelPresets = {
+  'all-cloud': {
+    label: '全云端',
+    description: '所有Agent使用当前默认云端模型',
+    models: {}
+  },
+  'hybrid': {
+    label: '混合模式(推荐)',
+    description: '本地Ollama承担简单任务，云端API承担核心任务，成本最优',
+    models: {
+      problemAnalyst: 'qwen2.5:7b',
+      qualityAuditor: 'qwen2.5:7b',
+      modelingExpert: '',
+      coder: '',
+      resultAnalyst: '',
+      paperWriter: '',
+      critic: ''
+    },
+    note: '需先安装Ollama并拉取 qwen2.5:7b 模型；云端模型使用当前默认配置'
+  },
+  'all-local': {
+    label: '全本地',
+    description: '所有Agent使用本地Ollama模型，完全免费',
+    models: {
+      problemAnalyst: 'qwen2.5:7b',
+      modelingExpert: 'qwen2.5:14b',
+      coder: 'qwen2.5-coder:7b',
+      resultAnalyst: 'qwen2.5:14b',
+      paperWriter: 'qwen2.5:14b',
+      qualityAuditor: 'qwen2.5:7b',
+      critic: 'qwen2.5:14b'
+    },
+    note: '需先安装Ollama并拉取对应模型；建议电脑内存≥16GB'
+  },
+  'clear': {
+    label: '清空',
+    description: '清除所有Agent专用模型配置，全部使用默认模型',
+    models: {}
+  }
+};
+
+function applyPreset(presetKey) {
+  const preset = modelPresets[presetKey];
+  if (!preset) return;
+  
+  // For hybrid mode, also set default provider to Ollama for local agents
+  if (presetKey === 'hybrid') {
+    // Keep current cloud provider as default, local models specified per-agent
+    showToast('info', '混合模式：G1/G6使用本地Ollama(qwen2.5:7b)，其余使用当前云端模型');
+  }
+  
+  // Apply model settings
+  aiSettings.agentModels = { ...preset.models };
+  
+  // Update UI
+  const agentKeys = ['problemAnalyst', 'modelingExpert', 'coder', 'resultAnalyst', 'paperWriter', 'qualityAuditor', 'critic'];
+  agentKeys.forEach(key => {
+    const input = document.getElementById(`agent-model-${key}`);
+    if (input) {
+      input.value = preset.models[key] || '';
+    }
+  });
+  
+  if (preset.note) {
+    setTimeout(() => showToast('info', preset.note), 1500);
+  } else {
+    showToast('success', `已应用预设：${preset.label}`);
+  }
 }
 
 function openAiSettings() {
@@ -3067,9 +3144,16 @@ async function executeGateMultiAgent(gateId, onProgress) {
 
 // Helper: call AI API with optional model override, supports multiple provider types
 async function callAI(messages, modelOverride) {
-  const model = modelOverride || aiSettings.model;
-  const baseUrl = aiSettings.baseUrl.replace(/\/$/, '');
-  const apiKey = aiSettings.apiKey;
+  let model = modelOverride || aiSettings.model;
+  let baseUrl = aiSettings.baseUrl.replace(/\/$/, '');
+  let apiKey = aiSettings.apiKey;
+  
+  // Auto-detect local Ollama models (model names with colon like qwen2.5:7b)
+  const isLocalModel = model.includes(':') && !model.includes('/') && !model.includes('gpt') && !model.includes('claude') && !model.includes('gemini');
+  if (isLocalModel) {
+    baseUrl = 'http://localhost:11434/v1';
+    apiKey = 'ollama';
+  }
   
   // Detect provider type
   const isAnthropic = baseUrl.includes('anthropic.com');
