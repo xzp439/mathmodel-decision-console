@@ -1168,19 +1168,25 @@ body { min-width:1280px; }
     </div>
     <div class="ai-modal-body">
       <div class="ai-form-group">
+        <label class="ai-form-label">AI 提供商</label>
+        <select class="ai-form-input" id="ai-provider-select" onchange="onProviderChange()" style="padding:8px 12px;">
+        </select>
+        <div class="ai-form-hint">选择后自动填充API地址和默认模型，可在下方修改</div>
+      </div>
+      <div class="ai-form-group">
         <label class="ai-form-label">API 地址 (Base URL)</label>
         <input type="text" class="ai-form-input" id="ai-base-url" placeholder="https://ark.cn-beijing.volces.com/api/v3" value="https://ark.cn-beijing.volces.com/api/v3">
-        <div class="ai-form-hint">豆包/火山方舟默认地址，OpenAI兼容格式</div>
+        <div class="ai-form-hint">OpenAI兼容格式；Anthropic/Gemini自动适配协议</div>
       </div>
       <div class="ai-form-group">
         <label class="ai-form-label">API Key</label>
         <input type="password" class="ai-form-input" id="ai-api-key" placeholder="sk-xxxxxxxxxxxxxxxx">
-        <div class="ai-form-hint">在 <a href="https://console.volcengine.com/ark" target="_blank">火山方舟控制台</a> 申请，仅保存在本地浏览器</div>
+        <div class="ai-form-hint">仅保存在本地浏览器，不上传任何服务器</div>
       </div>
       <div class="ai-form-group">
         <label class="ai-form-label">模型名称 (Model ID)</label>
         <input type="text" class="ai-form-input" id="ai-model" placeholder="doubao-seed-2-0-lite-260428" value="doubao-seed-2-0-lite-260428">
-        <div class="ai-form-hint">默认模型，所有Agent共用；下方可为不同Agent单独配置</div>
+        <div class="ai-form-hint">当前提供商的默认模型，所有Agent共用</div>
       </div>
       <div class="ai-form-group">
         <label class="ai-form-label" style="cursor:pointer;display:flex;align-items:center;gap:6px;" onclick="toggleModelConfig()">
@@ -1957,12 +1963,30 @@ function copyCurrentText() {
   });
 }
 
-// ===== AI Analysis =====
+// ===== AI Analysis - Multi-provider Support =====
+const defaultProviders = [
+  { id: 'volcengine', name: '火山引擎/豆包', baseUrl: 'https://ark.cn-beijing.volces.com/api/v3', apiKey: '', defaultModel: 'doubao-seed-2-0-lite-260428', type: 'openai' },
+  { id: 'openai', name: 'OpenAI', baseUrl: 'https://api.openai.com/v1', apiKey: '', defaultModel: 'gpt-4o', type: 'openai' },
+  { id: 'anthropic', name: 'Anthropic Claude', baseUrl: 'https://api.anthropic.com/v1', apiKey: '', defaultModel: 'claude-sonnet-4-20250514', type: 'anthropic' },
+  { id: 'gemini', name: 'Google Gemini', baseUrl: 'https://generativelanguage.googleapis.com/v1beta', apiKey: '', defaultModel: 'gemini-2.0-flash', type: 'gemini' },
+  { id: 'deepseek', name: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', apiKey: '', defaultModel: 'deepseek-chat', type: 'openai' },
+  { id: 'qwen', name: '通义千问', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', apiKey: '', defaultModel: 'qwen-plus', type: 'openai' },
+  { id: 'zhipu', name: '智谱AI/GLM', baseUrl: 'https://open.bigmodel.cn/api/paas/v4', apiKey: '', defaultModel: 'glm-4-flash', type: 'openai' },
+  { id: 'moonshot', name: '月之暗面/Kimi', baseUrl: 'https://api.moonshot.cn/v1', apiKey: '', defaultModel: 'moonshot-v1-8k', type: 'openai' },
+  { id: 'ollama', name: 'Ollama (本地)', baseUrl: 'http://localhost:11434/v1', apiKey: 'ollama', defaultModel: 'llama3.1', type: 'openai' },
+  { id: 'lmstudio', name: 'LM Studio (本地)', baseUrl: 'http://localhost:1234/v1', apiKey: 'lm-studio', defaultModel: 'local-model', type: 'openai' },
+  { id: 'openrouter', name: 'OpenRouter (聚合)', baseUrl: 'https://openrouter.ai/api/v1', apiKey: '', defaultModel: 'openai/gpt-4o', type: 'openai' },
+  { id: 'custom', name: '自定义 (OpenAI兼容)', baseUrl: '', apiKey: '', defaultModel: '', type: 'openai' }
+];
+
 let aiSettings = {
   baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
   apiKey: '',
   model: 'doubao-seed-2-0-lite-260428',
-  autoFill: true
+  autoFill: true,
+  defaultProvider: 'volcengine',
+  providers: [],
+  agentModels: {}
 };
 let aiAnalysisResult = '';
 
@@ -1972,11 +1996,39 @@ function loadAiSettings() {
     try { aiSettings = { ...aiSettings, ...JSON.parse(saved) }; } catch(e) {}
   }
   if (!aiSettings.agentModels) aiSettings.agentModels = {};
+  if (!aiSettings.providers) aiSettings.providers = [];
+  
+  // Populate provider select
+  populateProviderSelect();
+  
   document.getElementById('ai-base-url').value = aiSettings.baseUrl;
   document.getElementById('ai-api-key').value = aiSettings.apiKey;
   document.getElementById('ai-model').value = aiSettings.model;
   document.getElementById('ai-auto-fill').checked = aiSettings.autoFill;
+  document.getElementById('ai-provider-select').value = aiSettings.defaultProvider || 'volcengine';
   renderAgentModelConfig();
+}
+
+function populateProviderSelect() {
+  const select = document.getElementById('ai-provider-select');
+  if (!select) return;
+  select.innerHTML = defaultProviders.map(p => 
+    `<option value="${p.id}">${p.name}</option>`
+  ).join('');
+}
+
+function onProviderChange() {
+  const providerId = document.getElementById('ai-provider-select').value;
+  const provider = defaultProviders.find(p => p.id === providerId);
+  if (provider) {
+    document.getElementById('ai-base-url').value = provider.baseUrl;
+    document.getElementById('ai-model').value = provider.defaultModel;
+    // Check if user has saved API key for this provider
+    const saved = aiSettings.providers.find(p => p.id === providerId);
+    if (saved && saved.apiKey) {
+      document.getElementById('ai-api-key').value = saved.apiKey;
+    }
+  }
 }
 
 function saveAiSettings() {
@@ -1984,6 +2036,22 @@ function saveAiSettings() {
   aiSettings.apiKey = document.getElementById('ai-api-key').value.trim();
   aiSettings.model = document.getElementById('ai-model').value.trim();
   aiSettings.autoFill = document.getElementById('ai-auto-fill').checked;
+  aiSettings.defaultProvider = document.getElementById('ai-provider-select').value;
+  
+  // Save API key for current provider
+  const providerId = aiSettings.defaultProvider;
+  const existingIdx = aiSettings.providers.findIndex(p => p.id === providerId);
+  const providerData = {
+    id: providerId,
+    apiKey: aiSettings.apiKey,
+    baseUrl: aiSettings.baseUrl,
+    model: aiSettings.model
+  };
+  if (existingIdx >= 0) {
+    aiSettings.providers[existingIdx] = providerData;
+  } else {
+    aiSettings.providers.push(providerData);
+  }
   
   // Save per-agent models
   aiSettings.agentModels = {};
@@ -2997,14 +3065,75 @@ async function executeGateMultiAgent(gateId, onProgress) {
   return { result: finalResult, conversation };
 }
 
-// Helper: call AI API with optional model override
+// Helper: call AI API with optional model override, supports multiple provider types
 async function callAI(messages, modelOverride) {
   const model = modelOverride || aiSettings.model;
-  const response = await fetch(`${aiSettings.baseUrl}/chat/completions`, {
+  const baseUrl = aiSettings.baseUrl.replace(/\/$/, '');
+  const apiKey = aiSettings.apiKey;
+  
+  // Detect provider type
+  const isAnthropic = baseUrl.includes('anthropic.com');
+  const isGemini = baseUrl.includes('generativelanguage.googleapis.com') || baseUrl.includes('gemini');
+  
+  if (isAnthropic) {
+    // Anthropic Messages API format
+    const systemMsg = messages.find(m => m.role === 'system');
+    const userMessages = messages.filter(m => m.role !== 'system');
+    const response = await fetch(`${baseUrl}/messages`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: model,
+        max_tokens: 8000,
+        system: systemMsg ? systemMsg.content : undefined,
+        messages: userMessages
+      })
+    });
+    if (!response.ok) {
+      const err = await response.text();
+      throw new Error(`API错误 ${response.status}：${err.slice(0, 200)}`);
+    }
+    const data = await response.json();
+    // Convert Anthropic response to OpenAI format
+    return { choices: [{ message: { content: data.content[0].text } }] };
+  }
+  
+  if (isGemini) {
+    // Gemini API format
+    const systemMsg = messages.find(m => m.role === 'system');
+    const contents = messages.filter(m => m.role !== 'system').map(m => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.content }]
+    }));
+    const url = `${baseUrl}/models/${model}:generateContent?key=${apiKey}`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: contents,
+        systemInstruction: systemMsg ? { parts: [{ text: systemMsg.content }] } : undefined,
+        generationConfig: { maxOutputTokens: 8000, temperature: 0.7 }
+      })
+    });
+    if (!response.ok) {
+      const err = await response.text();
+      throw new Error(`API错误 ${response.status}：${err.slice(0, 200)}`);
+    }
+    const data = await response.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    return { choices: [{ message: { content: text } }] };
+  }
+  
+  // Default: OpenAI-compatible format (火山引擎, OpenAI, DeepSeek, 通义, 智谱, Kimi, Ollama, LM Studio, OpenRouter, etc.)
+  const response = await fetch(`${baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${aiSettings.apiKey}`
+      'Authorization': `Bearer ${apiKey}`
     },
     body: JSON.stringify({
       model: model,
