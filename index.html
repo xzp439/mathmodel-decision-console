@@ -11,6 +11,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="stylesheet" href="https://miaoda.feishu.cn/fonts/css2?family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="skills-full.js"></script>
 <script>
   if (typeof pdfjsLib !== 'undefined') {
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -2559,6 +2560,10 @@ async function executeGateAI(gateId) {
   try {
     const prompt = template(context);
     
+    // Get full skill content for this gate
+    const skillContent = getGateSkillContent(gateId);
+    const systemPrompt = `你是一位资深数学建模竞赛教练和质量审计专家。你必须严格按照以下SKILL.md文件中定义的工作流程、输入输出格式和质量检查标准来执行任务。\n\n${skillContent}\n\n输出要求结构化、条理清晰、可操作性强，所有结论必须有具体数字或证据支撑。`;
+    
     const response = await fetch(`${aiSettings.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
@@ -2568,11 +2573,11 @@ async function executeGateAI(gateId) {
       body: JSON.stringify({
         model: aiSettings.model,
         messages: [
-          { role: 'system', content: '你是一位资深数学建模竞赛教练和质量审计专家。输出要求结构化、条理清晰、可操作性强，所有结论必须有具体数字或证据支撑。' },
+          { role: 'system', content: systemPrompt },
           { role: 'user', content: prompt }
         ],
         temperature: 0.7,
-        max_tokens: 6000
+        max_tokens: 8000
       })
     });
     
@@ -2587,6 +2592,7 @@ async function executeGateAI(gateId) {
     // Save result to gate state
     state[gateId].aiResult = result;
     state[gateId].aiGeneratedAt = Date.now();
+    state[gateId].skillsUsed = gateSkillMap[gateId] || [];
     saveState();
     
     // Update gate's aiSuggestion with a summary
@@ -2778,6 +2784,30 @@ async function executeAllGates() {
   updateStats();
 }
 
+// Gate to skill mapping (full SKILL.md content will be injected)
+const gateSkillMap = {
+  g1: ['problem-parser', 'problem-classifier'],
+  g2: ['method-selector', 'related-paper-analyzer'],
+  g25: ['method-selector', 'modeler-decision-logger'],
+  g3: ['code-reviewer', 'python-code-reviewer', 'matlab-code-reviewer'],
+  g45: ['result-report-generator', 'robustness-checker', 'final-method-explainer'],
+  g4: ['solution-package-builder'],
+  g5: ['paper-section-writer', 'paper-polisher', 'figure-table-planner'],
+  g6: ['completeness-auditor', 'consistency-auditor', 'quality-assurance-auditor']
+};
+
+function getGateSkillContent(gateId) {
+  const skills = gateSkillMap[gateId] || [];
+  if (typeof skillFullContents === 'undefined') return '';
+  let content = '';
+  skills.forEach(skillName => {
+    if (skillFullContents[skillName]) {
+      content += `\n\n========== SKILL: ${skillName} ==========\n${skillFullContents[skillName]}`;
+    }
+  });
+  return content;
+}
+
 // Silent version of executeGateAI for batch execution (no toast, no renderDetail)
 async function executeGateAISilent(gateId) {
   const g = gates[gateId];
@@ -2820,6 +2850,10 @@ async function executeGateAISilent(gateId) {
   
   const prompt = template(context);
   
+  // Get full skill content for this gate
+  const skillContent = getGateSkillContent(gateId);
+  const systemPrompt = `你是一位资深数学建模竞赛教练和质量审计专家。你必须严格按照以下SKILL.md文件中定义的工作流程、输入输出格式和质量检查标准来执行任务。\n\n${skillContent}\n\n输出要求结构化、条理清晰、可操作性强，所有结论必须有具体数字或证据支撑。`;
+  
   const response = await fetch(`${aiSettings.baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
@@ -2829,11 +2863,11 @@ async function executeGateAISilent(gateId) {
     body: JSON.stringify({
       model: aiSettings.model,
       messages: [
-        { role: 'system', content: '你是一位资深数学建模竞赛教练和质量审计专家。输出要求结构化、条理清晰、可操作性强，所有结论必须有具体数字或证据支撑。' },
+        { role: 'system', content: systemPrompt },
         { role: 'user', content: prompt }
       ],
       temperature: 0.7,
-      max_tokens: 6000
+      max_tokens: 8000
     })
   });
   
@@ -2848,6 +2882,7 @@ async function executeGateAISilent(gateId) {
   // Save result
   state[gateId].aiResult = result;
   state[gateId].aiGeneratedAt = Date.now();
+  state[gateId].skillsUsed = gateSkillMap[gateId] || [];
   saveState();
   
   return result;
