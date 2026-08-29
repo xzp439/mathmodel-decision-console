@@ -10,6 +10,12 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="stylesheet" href="https://miaoda.feishu.cn/fonts/css2?family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+  if (typeof pdfjsLib !== 'undefined') {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+</script>
 <style>
 :root {
   --bg-deep: #0a0e1a;
@@ -1214,6 +1220,7 @@ async function renderFilePanel() {
     <button class="start-cta-btn" ${hasProblem ? '' : 'disabled'} onclick="startCompetition()">
       ${competitionStarted ? '继续竞赛 →' : '开始竞赛 →'}
     </button>
+    ${hasProblem ? `<button style="width:100%;margin-top:8px;padding:8px;font-size:12px;font-weight:600;background:var(--bg-card);color:var(--accent);border:1px solid var(--accent);border-radius:6px;cursor:pointer;" onclick="extractAllProblemText()">📄 提取全部题目文本（发给AI分析）</button>` : ''}
   </div>`;
   
   // Storage usage
@@ -1262,6 +1269,7 @@ async function renderFilePanel() {
           <div class="file-meta">${formatFileSize(f.size)} · ${dateStr}</div>
         </div>
         <div class="file-actions">
+          ${(f.type === 'application/pdf' || f.name.endsWith('.pdf')) ? `<button class="file-action-btn" title="提取文本" onclick="extractPdfText(${f.id})">📝</button>` : ''}
           <button class="file-action-btn" title="预览" onclick="previewFile(${f.id})">👁</button>
           <button class="file-action-btn" title="下载" onclick="downloadFile(${f.id})">⬇</button>
           <button class="file-action-btn file-delete" title="删除" onclick="removeFile(${f.id})">✕</button>
@@ -1385,6 +1393,130 @@ function startCompetition() {
   showToast('success', '竞赛已开始！进入G1问题解析阶段');
   // Re-render file panel to update button state
   if (activeTab === 'files') renderFilePanel();
+}
+
+// ===== PDF Text Extraction =====
+async function extractPdfText(fileId) {
+  const f = await getFile(fileId);
+  if (!f) return;
+  
+  if (typeof pdfjsLib === 'undefined') {
+    showToast('warning', 'PDF解析库加载失败，请检查网络');
+    return;
+  }
+  
+  showToast('info', `正在解析「${f.name}」...`);
+  
+  try {
+    const arrayBuffer = await f.blob.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    let fullText = '';
+    
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items.map(item => item.str).join(' ');
+      fullText += `\n\n=== 第 ${i} 页 ===\n${pageText}`;
+    }
+    
+    // Show extracted text in modal
+    showExtractedText(f.name, fullText, pdf.numPages);
+    showToast('success', `解析完成，共 ${pdf.numPages} 页`);
+    
+  } catch (err) {
+    console.error('PDF extraction error:', err);
+    showToast('warning', '解析失败：该PDF可能是扫描件（图片格式），无法提取文字');
+  }
+}
+
+async function extractAllProblemText() {
+  const files = await getAllFiles();
+  const problemFiles = files.filter(f => f.category === 'problem' && (f.type === 'application/pdf' || f.name.endsWith('.pdf')));
+  
+  if (problemFiles.length === 0) {
+    showToast('warning', '没有找到比赛题目PDF文件');
+    return;
+  }
+  
+  showToast('info', `正在解析 ${problemFiles.length} 个题目文件...`);
+  
+  let allText = '';
+  let totalPages = 0;
+  
+  for (const f of problemFiles) {
+    try {
+      const arrayBuffer = await f.blob.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      totalPages += pdf.numPages;
+      let fileText = `\n\n========== 文件：${f.name} ==========\n`;
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items.map(item => item.str).join(' ');
+        fileText += `\n\n--- 第 ${i} 页 ---\n${pageText}`;
+      }
+      allText += fileText;
+    } catch (err) {
+      console.error('Error extracting', f.name, err);
+    }
+  }
+  
+  showExtractedText(`全部题目（${problemFiles.length}个文件，${totalPages}页）`, allText, totalPages);
+  showToast('success', `解析完成：${problemFiles.length}个文件，${totalPages}页`);
+}
+
+let currentExtractedText = '';
+
+function showExtractedText(title, text, pages) {
+  currentExtractedText = text;
+  const modal = document.createElement('div');
+  modal.className = 'file-preview-modal';
+  modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+  
+  const charCount = text.length;
+  modal.innerHTML = `<div class="file-preview-content" style="max-width:800px;">
+    <div class="file-preview-header">
+      <span style="font-size:13px;font-weight:600;">📄 ${title}</span>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <span style="font-size:11px;color:var(--text-muted);font-family:var(--mono);">${charCount} 字 · ${pages} 页</span>
+        <button id="copy-extracted-btn" style="background:var(--accent);color:#000;border:none;padding:5px 12px;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600;">📋 一键复制</button>
+        <button style="background:none;border:none;color:var(--text-secondary);font-size:18px;cursor:pointer;" onclick="this.closest('.file-preview-modal').remove()">✕</button>
+      </div>
+    </div>
+    <div style="padding:16px;max-height:70vh;overflow:auto;">
+      <pre style="white-space:pre-wrap;word-break:break-word;font-family:var(--sans);font-size:13px;line-height:1.8;color:var(--text-primary);">${escapeHtml(text)}</pre>
+    </div>
+    <div style="padding:12px 16px;border-top:1px solid var(--border);background:var(--bg-card);font-size:11px;color:var(--text-secondary);">
+      💡 提示：点击「一键复制」后，粘贴到对话中，AI即可开始帮你分析题目
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+  document.getElementById('copy-extracted-btn').onclick = copyCurrentText;
+}
+
+function copyCurrentText() {
+  const btn = document.getElementById('copy-extracted-btn');
+  navigator.clipboard.writeText(currentExtractedText).then(() => {
+    btn.textContent = '✅ 已复制';
+    btn.style.background = 'var(--green)';
+    setTimeout(() => {
+      btn.textContent = '📋 一键复制';
+      btn.style.background = 'var(--accent)';
+    }, 2000);
+  }).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = currentExtractedText;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+    btn.textContent = '✅ 已复制';
+    btn.style.background = 'var(--green)';
+    setTimeout(() => {
+      btn.textContent = '📋 一键复制';
+      btn.style.background = 'var(--accent)';
+    }, 2000);
+  });
 }
 
 // ===== Theme & Visual Enhancements =====
