@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -2114,9 +2114,9 @@ const modelPresets = {
   },
   'hybrid': {
     label: '混合模式(推荐)',
-    description: '本地Ollama承担简单任务，云端API承担核心任务，成本最优',
+    description: '本地Ollama承担简单任务(G1/G6)，云端API承担核心任务，成本最优',
     models: {
-      problemAnalyst: 'qwen2.5:7b',
+      problemAnalyst: 'qwen2.5:3b',
       qualityAuditor: 'qwen2.5:7b',
       modelingExpert: '',
       coder: '',
@@ -2124,7 +2124,7 @@ const modelPresets = {
       paperWriter: '',
       critic: ''
     },
-    note: '需先安装Ollama并拉取 qwen2.5:7b 模型；云端模型使用当前默认配置'
+    note: '需先安装Ollama并拉取 qwen2.5:3b 和 qwen2.5:7b 模型；云端模型使用当前默认配置'
   },
   'all-local': {
     label: '全本地',
@@ -3223,7 +3223,8 @@ async function callAI(messages, modelOverride) {
       model: model,
       messages: messages,
       temperature: 0.7,
-      max_tokens: 8000
+      max_tokens: 8000,
+      ...(isLocalModel ? { options: { num_ctx: 2048, num_batch: 512 } } : {})
     })
   });
   
