@@ -1,0 +1,1258 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>数模竞赛工作流 · 人工决策控制台</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<meta name="theme-color" content="#0a0e1a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="stylesheet" href="https://miaoda.feishu.cn/fonts/css2?family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap">
+<style>
+:root {
+  --bg-deep: #0a0e1a;
+  --bg-panel: #111827;
+  --bg-card: #1a2234;
+  --bg-hover: #243049;
+  --border: #2d3a52;
+  --border-light: #3d4f6e;
+  --text-primary: #e8edf5;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --accent: #f59e0b;
+  --accent-dim: rgba(245,158,11,0.15);
+  --green: #22c55e;
+  --green-dim: rgba(34,197,94,0.12);
+  --red: #ef4444;
+  --red-dim: rgba(239,68,68,0.12);
+  --blue: #3b82f6;
+  --blue-dim: rgba(59,130,246,0.12);
+  --purple: #a855f7;
+  --purple-dim: rgba(168,85,247,0.12);
+  --mono: 'JetBrains Mono', 'Consolas', monospace;
+  --sans: 'Noto Sans SC', -apple-system, sans-serif;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { height:100%; background:var(--bg-deep); color:var(--text-primary); font-family:var(--sans); font-size:14px; overflow:hidden; }
+body { min-width:1280px; }
+
+/* ===== Layout ===== */
+.app { display:grid; grid-template-columns: 280px 1fr 320px; grid-template-rows: 56px 1fr; height:100vh; }
+.topbar { grid-column:1/-1; display:flex; align-items:center; padding:0 24px; background:var(--bg-panel); border-bottom:1px solid var(--border); gap:16px; }
+.topbar .logo { display:flex; align-items:center; gap:10px; font-weight:700; font-size:15px; letter-spacing:0.5px; }
+.topbar .logo .dot { width:10px; height:10px; border-radius:50%; background:var(--accent); box-shadow:0 0 12px var(--accent); animation:pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.5;} }
+.topbar .divider { width:1px; height:24px; background:var(--border); }
+.topbar .meta { display:flex; gap:20px; font-size:12px; color:var(--text-secondary); }
+.topbar .meta span b { color:var(--text-primary); font-family:var(--mono); }
+.topbar .spacer { flex:1; }
+.topbar .clock { font-family:var(--mono); font-size:13px; color:var(--accent); }
+.topbar-btn { padding:6px 12px; font-size:12px; background:var(--bg-card); border:1px solid var(--border); color:var(--text-secondary); border-radius:6px; cursor:pointer; font-family:var(--sans); transition:all 0.15s; }
+.topbar-btn:hover { border-color:var(--accent); color:var(--accent); background:var(--accent-dim); }
+.topbar-btn-danger:hover { border-color:var(--red); color:var(--red); background:var(--red-dim); }
+
+.sidebar { background:var(--bg-panel); border-right:1px solid var(--border); overflow-y:auto; padding:16px 0; }
+.sidebar .section-title { padding:8px 20px; font-size:11px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-muted); }
+.stage-item { padding:10px 20px; cursor:pointer; border-left:3px solid transparent; transition:all 0.15s; }
+.stage-item:hover { background:var(--bg-hover); }
+.stage-item.active { background:var(--bg-card); border-left-color:var(--accent); }
+.stage-item .stage-num { font-family:var(--mono); font-size:11px; color:var(--text-muted); }
+.stage-item .stage-name { font-size:13px; font-weight:500; margin-top:2px; }
+.stage-item .stage-gates { display:flex; gap:4px; margin-top:6px; }
+.gate-chip { width:8px; height:8px; border-radius:50%; background:var(--text-muted); }
+.gate-chip.pass { background:var(--green); box-shadow:0 0 6px var(--green); }
+.gate-chip.block { background:var(--red); box-shadow:0 0 6px var(--red); }
+.gate-chip.pending { background:var(--accent); box-shadow:0 0 6px var(--accent); animation:pulse 1.5s infinite; }
+
+.main { overflow-y:auto; padding:24px; background:var(--bg-deep); }
+.right-panel { background:var(--bg-panel); border-left:1px solid var(--border); overflow-y:auto; display:flex; flex-direction:column; }
+
+/* ===== Pipeline Visual ===== */
+.pipeline-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; }
+.pipeline-header h2 { font-size:18px; font-weight:700; }
+.pipeline-header .progress-bar { width:200px; height:6px; background:var(--bg-card); border-radius:3px; overflow:hidden; }
+.pipeline-header .progress-fill { height:100%; background:linear-gradient(90deg, var(--accent), var(--green)); border-radius:3px; transition:width 0.5s; }
+
+.pipeline { position:relative; background:var(--bg-panel); border:1px solid var(--border); border-radius:12px; padding:32px 24px; margin-bottom:24px; }
+.pipeline-svg { width:100%; height:120px; }
+.gate-row { display:grid; grid-template-columns:repeat(8,1fr); gap:8px; margin-top:-10px; position:relative; z-index:2; }
+.gate-node { text-align:center; cursor:pointer; padding:8px 4px; border-radius:8px; transition:all 0.15s; position:relative; }
+.gate-node:hover { background:var(--bg-hover); }
+.gate-node.selected { background:var(--bg-card); box-shadow:0 0 0 1px var(--accent); }
+.gate-node .gate-icon { width:40px; height:40px; border-radius:10px; margin:0 auto 6px; display:flex; align-items:center; justify-content:center; font-family:var(--mono); font-size:11px; font-weight:700; border:2px solid; position:relative; }
+.gate-node .gate-icon.human { border-style:dashed; }
+.gate-node .gate-icon::after { content:''; position:absolute; top:-4px; right:-4px; width:12px; height:12px; border-radius:50%; border:2px solid var(--bg-panel); }
+.gate-node.status-pass .gate-icon { border-color:var(--green); background:var(--green-dim); color:var(--green); }
+.gate-node.status-pass .gate-icon::after { background:var(--green); }
+.gate-node.status-block .gate-icon { border-color:var(--red); background:var(--red-dim); color:var(--red); }
+.gate-node.status-block .gate-icon::after { background:var(--red); }
+.gate-node.status-pending .gate-icon { border-color:var(--accent); background:var(--accent-dim); color:var(--accent); }
+.gate-node.status-pending .gate-icon::after { background:var(--accent); animation:pulse 1.5s infinite; }
+.gate-node .gate-label { font-size:11px; font-weight:600; color:var(--text-primary); }
+.gate-node .gate-sub { font-size:10px; color:var(--text-muted); margin-top:2px; }
+.gate-node .risk-dot { position:absolute; top:4px; left:4px; width:6px; height:6px; border-radius:50%; }
+.risk-critical { background:var(--red); box-shadow:0 0 6px var(--red); }
+.risk-high { background:var(--accent); box-shadow:0 0 6px var(--accent); }
+.risk-medium { background:var(--blue); box-shadow:0 0 6px var(--blue); }
+.risk-low { background:var(--green); box-shadow:0 0 6px var(--green); }
+
+.risk-badge { font-family:var(--mono); font-size:10px; font-weight:700; padding:2px 8px; border-radius:4px; letter-spacing:0.5px; }
+.risk-badge.critical { background:var(--red-dim); color:var(--red); border:1px solid var(--red); }
+.risk-badge.high { background:var(--accent-dim); color:var(--accent); border:1px solid var(--accent); }
+.risk-badge.medium { background:var(--blue-dim); color:var(--blue); border:1px solid var(--blue); }
+.risk-badge.low { background:var(--green-dim); color:var(--green); border:1px solid var(--green); }
+
+/* Timeline */
+.tabs { display:flex; border-bottom:1px solid var(--border); }
+.tab { flex:1; padding:10px; text-align:center; font-size:12px; font-weight:600; cursor:pointer; color:var(--text-muted); border-bottom:2px solid transparent; transition:all 0.15s; }
+.tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+.tab:hover { color:var(--text-primary); }
+.timeline-list { flex:1; overflow-y:auto; padding:12px; }
+.timeline-item { display:flex; gap:12px; padding-bottom:16px; position:relative; }
+.timeline-item:not(:last-child)::before { content:''; position:absolute; left:11px; top:28px; bottom:0; width:2px; background:var(--border); }
+.timeline-dot { width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:700; font-family:var(--mono); flex-shrink:0; z-index:1; }
+.timeline-dot.pass { background:var(--green-dim); color:var(--green); border:1px solid var(--green); }
+.timeline-dot.decision { background:var(--purple-dim); color:var(--purple); border:1px solid var(--purple); }
+.timeline-dot.info { background:var(--blue-dim); color:var(--blue); border:1px solid var(--blue); }
+.timeline-content { flex:1; }
+.timeline-title { font-size:12px; font-weight:600; margin-bottom:2px; }
+.timeline-desc { font-size:11px; color:var(--text-secondary); line-height:1.5; }
+.timeline-meta { font-size:10px; color:var(--text-muted); font-family:var(--mono); margin-top:4px; display:flex; gap:10px; }
+
+/* Keyboard hint */
+.kbd-hint { position:fixed; bottom:24px; left:24px; background:var(--bg-panel); border:1px solid var(--border); border-radius:8px; padding:10px 14px; font-size:11px; color:var(--text-muted); z-index:999; opacity:0; transition:opacity 0.3s; pointer-events:none; }
+.kbd-hint.show { opacity:1; }
+.kbd-hint kbd { font-family:var(--mono); background:var(--bg-card); border:1px solid var(--border); border-radius:3px; padding:1px 5px; font-size:10px; color:var(--text-primary); }
+
+/* Undo button */
+.undo-btn { padding:6px 12px; font-size:11px; background:var(--bg-card); border:1px solid var(--border); color:var(--text-secondary); border-radius:6px; cursor:pointer; font-family:var(--mono); transition:all 0.15s; }
+.undo-btn:hover { border-color:var(--accent); color:var(--accent); }
+
+/* Block reason */
+.block-reason { background:var(--red-dim); border:1px solid var(--red); border-radius:8px; padding:12px 16px; margin-bottom:16px; }
+.block-reason .br-label { font-size:11px; font-weight:700; color:var(--red); margin-bottom:4px; letter-spacing:0.5px; }
+.block-reason .br-text { font-size:12px; color:var(--text-primary); line-height:1.6; }
+
+/* Time tracking */
+.time-track { display:flex; gap:16px; margin-top:8px; font-size:11px; font-family:var(--mono); color:var(--text-muted); }
+.time-track span b { color:var(--text-secondary); }
+
+/* Gantt mini bar */
+.gantt-bar { height:4px; background:var(--bg-card); border-radius:2px; margin-top:6px; overflow:hidden; }
+.gantt-fill { height:100%; border-radius:2px; transition:width 0.3s; }
+
+/* Sub-checks */
+.subcheck-section { margin-top:20px; border-top:1px solid var(--border); padding-top:16px; }
+.subcheck-header { display:flex; align-items:center; justify-content:space-between; cursor:pointer; margin-bottom:12px; }
+.subcheck-header .sc-title { font-size:13px; font-weight:700; display:flex; align-items:center; gap:8px; }
+.subcheck-header .sc-count { font-family:var(--mono); font-size:11px; color:var(--text-muted); }
+.subcheck-header .sc-toggle { font-size:11px; color:var(--accent); font-family:var(--mono); }
+.subcheck-list { display:none; flex-direction:column; gap:6px; }
+.subcheck-list.show { display:flex; }
+.subcheck-item { display:flex; align-items:center; gap:10px; padding:8px 12px; background:var(--bg-card); border-radius:6px; font-size:12px; }
+.subcheck-item .sc-status { width:16px; height:16px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:700; flex-shrink:0; }
+.subcheck-item .sc-status.pass { background:var(--green-dim); color:var(--green); border:1px solid var(--green); }
+.subcheck-item .sc-status.fail { background:var(--red-dim); color:var(--red); border:1px solid var(--red); }
+.subcheck-item .sc-status.pending { background:var(--bg-deep); color:var(--text-muted); border:1px solid var(--border); }
+.subcheck-item .sc-name { flex:1; color:var(--text-secondary); }
+.subcheck-item .sc-name b { color:var(--text-primary); }
+.subcheck-item .sc-type { font-family:var(--mono); font-size:9px; padding:2px 6px; border-radius:3px; flex-shrink:0; }
+.subcheck-item .sc-type.auto { background:var(--blue-dim); color:var(--blue); border:1px solid var(--blue); }
+.subcheck-item .sc-type.semi { background:var(--accent-dim); color:var(--accent); border:1px solid var(--accent); }
+.subcheck-item .sc-type.human { background:var(--purple-dim); color:var(--purple); border:1px solid var(--purple); }
+
+/* Global checks */
+.gc-section { padding:16px 20px; border-top:1px solid var(--border); }
+.gc-section .gc-title { font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--text-muted); margin-bottom:10px; display:flex; justify-content:space-between; }
+.gc-list { display:flex; flex-direction:column; gap:4px; max-height:200px; overflow-y:auto; }
+.gc-item { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:4px; font-size:11px; cursor:pointer; transition:background 0.15s; }
+.gc-item:hover { background:var(--bg-hover); }
+.gc-item .gc-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+.gc-item .gc-dot.pass { background:var(--green); }
+.gc-item .gc-dot.fail { background:var(--red); }
+.gc-item .gc-dot.pending { background:var(--text-muted); }
+.gc-item .gc-name { flex:1; color:var(--text-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.gc-item .gc-skill { font-family:var(--mono); font-size:9px; color:var(--text-muted); }
+
+/* Pipeline 8 columns */
+.gate-row-8 { grid-template-columns:repeat(8,1fr) !important; }
+
+/* ===== Detail Panel ===== */
+.detail-panel { background:var(--bg-panel); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+.detail-header { padding:20px 24px; border-bottom:1px solid var(--border); display:flex; align-items:flex-start; justify-content:space-between; }
+.detail-header .gate-title { display:flex; align-items:center; gap:12px; }
+.detail-header .gate-badge { font-family:var(--mono); font-size:12px; font-weight:700; padding:4px 10px; border-radius:6px; }
+.detail-header .gate-badge.human { background:var(--purple-dim); color:var(--purple); border:1px solid var(--purple); }
+.detail-header .gate-badge.auto { background:var(--blue-dim); color:var(--blue); border:1px solid var(--blue); }
+.detail-header h3 { font-size:17px; font-weight:700; }
+.detail-header .gate-desc { font-size:12px; color:var(--text-secondary); margin-top:4px; }
+.status-badge { padding:6px 14px; border-radius:20px; font-size:12px; font-weight:600; font-family:var(--mono); }
+.status-badge.pass { background:var(--green-dim); color:var(--green); border:1px solid var(--green); }
+.status-badge.block { background:var(--red-dim); color:var(--red); border:1px solid var(--red); }
+.status-badge.pending { background:var(--accent-dim); color:var(--accent); border:1px solid var(--accent); }
+
+.detail-body { padding:24px; }
+.detail-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:24px; }
+.info-card { background:var(--bg-card); border-radius:8px; padding:16px; }
+.info-card .card-label { font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--text-muted); margin-bottom:10px; }
+.info-card .card-content { font-size:13px; line-height:1.7; color:var(--text-secondary); }
+.info-card .card-content b { color:var(--text-primary); }
+.ai-suggestion { background:var(--blue-dim); border-left:3px solid var(--blue); padding:14px 16px; border-radius:0 8px 8px 0; margin-bottom:20px; }
+.ai-suggestion .suggestion-label { font-size:11px; font-weight:700; color:var(--blue); letter-spacing:1px; margin-bottom:6px; }
+.ai-suggestion .suggestion-text { font-size:13px; line-height:1.7; color:var(--text-primary); }
+
+/* ===== Three Verdict (P0) ===== */
+.verdict-section { margin-top:8px; }
+.verdict-section .section-label { font-size:12px; font-weight:700; color:var(--text-secondary); margin-bottom:12px; display:flex; align-items:center; gap:8px; }
+.verdict-section .section-label .tag { font-family:var(--mono); font-size:10px; padding:2px 6px; border-radius:4px; background:var(--accent-dim); color:var(--accent); }
+.verdict-buttons { display:flex; gap:10px; margin-bottom:16px; }
+.verdict-btn { flex:1; padding:14px; border-radius:8px; border:2px solid var(--border); background:var(--bg-card); cursor:pointer; transition:all 0.15s; text-align:center; font-family:var(--sans); }
+.verdict-btn:hover { border-color:var(--border-light); background:var(--bg-hover); }
+.verdict-btn.selected.accept { border-color:var(--green); background:var(--green-dim); }
+.verdict-btn.selected.edit { border-color:var(--accent); background:var(--accent-dim); }
+.verdict-btn.selected.reject { border-color:var(--red); background:var(--red-dim); }
+.verdict-btn .v-icon { font-size:20px; margin-bottom:4px; }
+.verdict-btn .v-label { font-size:13px; font-weight:700; }
+.verdict-btn .v-desc { font-size:11px; color:var(--text-muted); margin-top:2px; }
+.verdict-btn.selected.accept .v-label { color:var(--green); }
+.verdict-btn.selected.edit .v-label { color:var(--accent); }
+.verdict-btn.selected.reject .v-label { color:var(--red); }
+
+.rationale-input { display:none; margin-top:12px; }
+.rationale-input.show { display:block; }
+.rationale-input textarea { width:100%; height:80px; background:var(--bg-deep); border:1px solid var(--border); border-radius:8px; padding:12px; color:var(--text-primary); font-family:var(--sans); font-size:13px; resize:vertical; }
+.rationale-input textarea:focus { outline:none; border-color:var(--accent); }
+.submit-verdict { margin-top:12px; padding:10px 24px; background:var(--accent); color:#000; border:none; border-radius:8px; font-size:13px; font-weight:700; cursor:pointer; transition:all 0.15s; }
+.submit-verdict:hover { background:#fbbf24; }
+.submit-verdict:disabled { opacity:0.4; cursor:not-allowed; }
+
+/* ===== Candidates (G2.5 special) ===== */
+.candidates-list { display:flex; flex-direction:column; gap:10px; margin-bottom:16px; }
+.candidate-item { background:var(--bg-card); border:1px solid var(--border); border-radius:8px; padding:14px 16px; display:flex; align-items:center; gap:14px; }
+.candidate-item.verdicted { border-color:var(--green); }
+.candidate-item .cand-num { font-family:var(--mono); font-size:12px; font-weight:700; color:var(--text-muted); width:24px; }
+.candidate-item .cand-info { flex:1; }
+.candidate-item .cand-name { font-size:13px; font-weight:600; }
+.candidate-item .cand-metric { font-size:11px; color:var(--text-muted); margin-top:2px; font-family:var(--mono); }
+.candidate-item .cand-verdict { font-size:11px; font-weight:700; padding:4px 10px; border-radius:4px; font-family:var(--mono); }
+.candidate-item .cand-verdict.none { background:var(--bg-deep); color:var(--text-muted); border:1px dashed var(--border); }
+.candidate-item .cand-verdict.chosen { background:var(--green-dim); color:var(--green); border:1px solid var(--green); }
+.candidate-item .cand-verdict.backup { background:var(--blue-dim); color:var(--blue); border:1px solid var(--blue); }
+.candidate-item .cand-verdict.rejected { background:var(--red-dim); color:var(--red); border:1px solid var(--red); }
+.candidate-item .cand-actions { display:flex; gap:4px; }
+.cand-action-btn { padding:4px 8px; font-size:11px; border:1px solid var(--border); background:var(--bg-deep); color:var(--text-secondary); border-radius:4px; cursor:pointer; font-family:var(--mono); }
+.cand-action-btn:hover { border-color:var(--accent); color:var(--accent); }
+
+/* ===== Right Panel: Notifications (P3) ===== */
+.notif-header { padding:16px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+.notif-header h4 { font-size:13px; font-weight:700; display:flex; align-items:center; gap:8px; }
+.notif-header .notif-count { font-family:var(--mono); font-size:11px; background:var(--red); color:#fff; padding:2px 7px; border-radius:10px; }
+.notif-header .clear-btn { font-size:11px; color:var(--text-muted); cursor:pointer; background:none; border:none; font-family:var(--sans); }
+.notif-header .clear-btn:hover { color:var(--accent); }
+.notif-list { flex:1; overflow-y:auto; padding:8px; }
+.notif-item { padding:12px 14px; border-radius:8px; margin-bottom:6px; border-left:3px solid; cursor:pointer; transition:background 0.15s; }
+.notif-item:hover { background:var(--bg-hover); }
+.notif-item.gate-trigger { border-color:var(--accent); background:var(--accent-dim); }
+.notif-item.gate-pass { border-color:var(--green); background:var(--green-dim); }
+.notif-item.gate-block { border-color:var(--red); background:var(--red-dim); }
+.notif-item.info { border-color:var(--blue); background:var(--blue-dim); }
+.notif-item .notif-title { font-size:12px; font-weight:600; margin-bottom:4px; }
+.notif-item .notif-desc { font-size:11px; color:var(--text-secondary); line-height:1.5; }
+.notif-item .notif-time { font-size:10px; color:var(--text-muted); font-family:var(--mono); margin-top:6px; }
+.notif-item .notif-channel { display:inline-block; font-size:9px; padding:1px 5px; border-radius:3px; background:var(--bg-deep); color:var(--text-muted); margin-left:6px; font-family:var(--mono); }
+
+/* Stats */
+.stats-section { padding:16px 20px; border-top:1px solid var(--border); }
+.stats-section .stats-title { font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--text-muted); margin-bottom:12px; }
+.stats-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.stat-box { background:var(--bg-card); border-radius:8px; padding:12px; text-align:center; }
+.stat-box .stat-num { font-family:var(--mono); font-size:22px; font-weight:700; }
+.stat-box .stat-num.green { color:var(--green); }
+.stat-box .stat-num.red { color:var(--red); }
+.stat-box .stat-num.amber { color:var(--accent); }
+.stat-box .stat-num.blue { color:var(--blue); }
+.stat-box .stat-label { font-size:10px; color:var(--text-muted); margin-top:4px; }
+
+/* Channel config (P3) */
+.channel-config { padding:16px 20px; border-top:1px solid var(--border); }
+.channel-config .ch-title { font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--text-muted); margin-bottom:10px; }
+.channel-row { display:flex; align-items:center; justify-content:space-between; padding:6px 0; font-size:12px; }
+.channel-row .ch-name { display:flex; align-items:center; gap:8px; color:var(--text-secondary); }
+.toggle { width:36px; height:20px; border-radius:10px; background:var(--bg-deep); border:1px solid var(--border); position:relative; cursor:pointer; transition:all 0.2s; }
+.toggle.on { background:var(--green); border-color:var(--green); }
+.toggle::after { content:''; position:absolute; top:2px; left:2px; width:14px; height:14px; border-radius:50%; background:var(--text-secondary); transition:all 0.2s; }
+.toggle.on::after { left:18px; background:#fff; }
+
+/* Toast */
+.toast-container { position:fixed; bottom:24px; right:24px; z-index:1000; display:flex; flex-direction:column; gap:8px; }
+.toast { padding:14px 20px; border-radius:8px; font-size:13px; font-weight:500; box-shadow:0 8px 32px rgba(0,0,0,0.4); animation:slideIn 0.3s ease; display:flex; align-items:center; gap:10px; }
+.toast.success { background:var(--green); color:#000; }
+.toast.info { background:var(--blue); color:#fff; }
+.toast.warning { background:var(--accent); color:#000; }
+@keyframes slideIn { from{transform:translateX(100%);opacity:0;} to{transform:translateX(0);opacity:1;} }
+
+/* Scrollbar */
+::-webkit-scrollbar { width:6px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+::-webkit-scrollbar-thumb:hover { background:var(--border-light); }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- Topbar -->
+  <div class="topbar">
+    <div class="logo"><div class="dot"></div>数模竞赛 · 人工决策控制台</div>
+    <div class="divider"></div>
+    <div class="meta">
+      <span>子问题 <b id="meta-q">Q1</b></span>
+      <span>Skill <b>28</b></span>
+      <span>Gate <b>8</b></span>
+      <span>人类决策 <b id="meta-human">2</b></span>
+    </div>
+    <div class="spacer"></div>
+    <div style="display:flex;gap:8px;">
+      <button class="topbar-btn" onclick="exportData()" title="导出JSON备份">⤓ 导出</button>
+      <button class="topbar-btn" onclick="importData()" title="导入JSON备份">⤒ 导入</button>
+      <button class="topbar-btn topbar-btn-danger" onclick="resetAll()" title="清空所有数据">↺ 重置</button>
+    </div>
+    <div class="clock" id="clock">--:--:--</div>
+  </div>
+
+  <!-- Sidebar -->
+  <div class="sidebar" id="sidebar"></div>
+
+  <!-- Main -->
+  <div class="main">
+    <div class="pipeline-header">
+      <h2>工作流管线 · 决策状态</h2>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <span style="font-size:12px;color:var(--text-muted);font-family:var(--mono);" id="progress-text">0/7 通过</span>
+        <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+      </div>
+    </div>
+
+    <!-- Pipeline Visual -->
+    <div class="pipeline">
+      <svg class="pipeline-svg" id="pipeline-svg" viewBox="0 0 900 120" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="lineGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#f59e0b;stop-opacity:0.6"/>
+            <stop offset="100%" style="stop-color:#22c55e;stop-opacity:0.6"/>
+          </linearGradient>
+        </defs>
+        <line x1="56" y1="40" x2="844" y2="40" stroke="#2d3a52" stroke-width="2" stroke-dasharray="6,4"/>
+        <line x1="56" y1="40" x2="56" y2="40" stroke="url(#lineGrad)" stroke-width="3" id="active-line"/>
+      </svg>
+      <div class="gate-row" id="gate-row"></div>
+    </div>
+
+    <!-- Detail Panel -->
+    <div class="detail-panel" id="detail-panel"></div>
+  </div>
+
+  <!-- Right Panel -->
+  <div class="right-panel">
+    <div class="tabs">
+      <div class="tab active" id="tab-notif" onclick="switchTab('notif')">通知中心</div>
+      <div class="tab" id="tab-timeline" onclick="switchTab('timeline')">决策审计</div>
+    </div>
+    <div id="panel-notif">
+      <div class="notif-header">
+        <h4>待处理 <span class="notif-count" id="notif-count">0</span></h4>
+        <button class="clear-btn" onclick="clearNotifications()">清空</button>
+      </div>
+      <div class="notif-list" id="notif-list"></div>
+    </div>
+    <div id="panel-timeline" style="display:none;">
+      <div class="timeline-list" id="timeline-list"></div>
+    </div>
+
+    <div class="stats-section">
+      <div class="stats-title">检测统计 (共56项)</div>
+      <div class="stats-grid" style="grid-template-columns:1fr 1fr 1fr;">
+        <div class="stat-box"><div class="stat-num green" id="stat-gate">0/8</div><div class="stat-label">Gate</div></div>
+        <div class="stat-box"><div class="stat-num blue" id="stat-sub">0/38</div><div class="stat-label">子检测</div></div>
+        <div class="stat-box"><div class="stat-num amber" id="stat-global">0/10</div><div class="stat-label">全局检测</div></div>
+        <div class="stat-box"><div class="stat-num green" id="stat-accept">0</div><div class="stat-label">Accept</div></div>
+        <div class="stat-box"><div class="stat-num amber" id="stat-edit">0</div><div class="stat-label">Edit</div></div>
+        <div class="stat-box"><div class="stat-num red" id="stat-reject">0</div><div class="stat-label">Reject</div></div>
+      </div>
+    </div>
+
+    <div class="channel-config">
+      <div class="ch-title">通知渠道 (P3)</div>
+      <div class="channel-row">
+        <span class="ch-name">● 站内通知</span>
+        <div class="toggle on" onclick="toggleChannel(this,'inapp')"></div>
+      </div>
+      <div class="channel-row">
+        <span class="ch-name">● 飞书推送</span>
+        <div class="toggle" onclick="toggleChannel(this,'feishu')"></div>
+      </div>
+      <div class="channel-row">
+        <span class="ch-name">● 邮件提醒</span>
+        <div class="toggle" onclick="toggleChannel(this,'email')"></div>
+      </div>
+      <div class="channel-row">
+        <span class="ch-name">● 仅高阻塞Gate</span>
+        <div class="toggle on" onclick="toggleChannel(this,'highonly')"></div>
+      </div>
+    </div>
+
+    <div class="gc-section">
+      <div class="gc-title">
+        <span>全局检测项 (10)</span>
+        <span id="gc-count" style="color:var(--text-muted);">0/10</span>
+      </div>
+      <div class="gc-list" id="gc-list"></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+<div class="kbd-hint" id="kbd-hint">
+  <kbd>←</kbd><kbd>→</kbd> 切换Gate · <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> 判决 · <kbd>Enter</kbd> 提交 · <kbd>U</kbd> 撤销 · <kbd>?</kbd> 帮助
+</div>
+
+<script>
+// ===== Data =====
+const stages = [
+  { id:'s1', name:'问题分析', gates:['g1'] },
+  { id:'s2', name:'方法选择', gates:['g2','g25'] },
+  { id:'s3', name:'代码实现', gates:['g3'] },
+  { id:'s4', name:'结果与稳健性', gates:['g45'] },
+  { id:'s5', name:'图表与冻结', gates:['g4'] },
+  { id:'s6', name:'论文写作', gates:['g5'] },
+  { id:'s7', name:'审计与提交', gates:['g6'] },
+];
+
+const gates = {
+  g1: { id:'g1', label:'G1', name:'问题解析确认', sub:'评价标准/问题类型', type:'auto', stage:'s1', risk:'low', estTime:'5-10min',
+    desc:'确认问题类型、评价标准和因果关系声明。AI起草，人类确认或修改。',
+    aiDoes:'解析问题、分类问题、起草评价标准和因果关系（[AI-DRAFT]）',
+    humanDoes:'确认或修改问题类型，填写评价标准和框架理由',
+    skills:'problem-parser, problem-classifier',
+    aiSuggestion:'检测到该问题为多目标优化类型（Optimization），建议评价标准采用：Pareto前沿覆盖率 + 收敛性指标(IGD) + 多样性指标(Spacing)。因果关系声明：资源分配→领域发展→综合效益，符合守恒定律。',
+    blockReason:'评价标准为空或问题类型未确认',
+    candidates:null },
+  g2: { id:'g2', label:'G2', name:'方法验证', sub:'候选PoC全部通过', type:'auto', stage:'s2', risk:'medium', estTime:'AI自动',
+    desc:'每个候选方法必须有≤30行PoC并在真实数据上跑出具体数字。失败立即替换。',
+    aiDoes:'生成2-4候选、每个跑≤30行PoC、失败立即替换',
+    humanDoes:'确认PoC结果，无操作则自动通过（≥1通过即可）',
+    skills:'method-selector',
+    aiSuggestion:'3个候选方法PoC结果：①NSGA-II — IGD=0.0234，运行时间12.3s；②MOEA/D — IGD=0.0198，运行时间8.7s；③SPEA2 — IGD=0.0312，运行时间15.1s。全部通过，建议优先考虑MOEA/D。',
+    blockReason:'所有候选PoC失败，无可用方法',
+    candidates:null },
+  g25: { id:'g25', label:'G2.5', name:'方法选择', sub:'人类选择最终方法+理由', type:'human', stage:'s2', risk:'critical', estTime:'15-30min',
+    desc:'【高阻塞】从候选中选择最终方法，必须填写选择理由。空答案或复制AI建议都不通过。',
+    aiDoes:'生成2-4候选、跑PoC、给量化对比表和ai_suggestion',
+    humanDoes:'从候选中选择最终方法，填写选择理由（必须用自己的话）',
+    skills:'method-selector, modeler-decision-logger',
+    aiSuggestion:'基于PoC量化对比，建议选择MOEA/D：IGD最优(0.0198)、运行时间最短(8.7s)、收敛稳定性最高(10次运行标准差0.002)。NSGA-II作为备选，SPEA2建议淘汰。',
+    blockReason:'未选择最终方法 或 理由为空/复制AI建议 或 候选未全部标记',
+    candidates:[
+      { id:'c1', name:'NSGA-II', metric:'IGD=0.0234 | 12.3s | σ=0.005', verdict:null },
+      { id:'c2', name:'MOEA/D', metric:'IGD=0.0198 | 8.7s | σ=0.002', verdict:null },
+      { id:'c3', name:'SPEA2', metric:'IGD=0.0312 | 15.1s | σ=0.008', verdict:null },
+    ]},
+  g45: { id:'g45', label:'G4.5', name:'结果/稳健性判决', sub:'方法标签+稳定性置信度', type:'human', stage:'s4', risk:'critical', estTime:'10-20min',
+    desc:'【高阻塞】分配[CHOSEN]/[BACKUP]/[REJECTED]标签，确认稳定性置信度(high/medium/needs_caution)。',
+    aiDoes:'生成结果报告、跑稳健性检查、给[AI-SUGGESTED]建议',
+    humanDoes:'分配方法标签，确认稳定性置信度，填写判决理由',
+    skills:'result-report-generator, robustness-checker, final-method-explainer',
+    aiSuggestion:'建议标签：MOEA/D → [CHOSEN]（主方法，稳健性high）；NSGA-II → [BACKUP]（备选，稳健性medium）；SPEA2 → [REJECTED]（淘汰，稳健性needs_caution）。100次参数扰动下分配占比标准差<0.1个百分点。',
+    blockReason:'未分配方法标签 或 未确认稳定性置信度',
+    candidates:null },
+  g4: { id:'g4', label:'G4', name:'结果冻结', sub:'人类签署数字冻结', type:'auto', stage:'s5', risk:'high', estTime:'5min',
+    desc:'签署确认frozen_numbers.json。冻结后论文数字不可更改，修改需记录并重新冻结。',
+    aiDoes:'整合方法说明+结果分析，生成解决方案包和frozen_numbers.json草稿',
+    humanDoes:'签署确认数字冻结，冻结后论文数字不可更改',
+    skills:'solution-package-builder',
+    aiSuggestion:'frozen_numbers.json已生成，包含23个关键数字：最优目标值F=1.5660、等比例F=1.2731、提升23.00%、各领域分配占比等。建议核对后签署冻结。',
+    blockReason:'数字未核对 或 存在未解决的数字不一致',
+    candidates:null },
+  g5: { id:'g5', label:'G5', name:'论文章节质量', sub:'关键框架声明确认', type:'auto', stage:'s6', risk:'medium', estTime:'10-15min',
+    desc:'确认3个高风险框架声明：摘要标题、方法选择叙事、结论。物理/领域意义解读需人类确认。',
+    aiDoes:'撰写论文章节，起草3个高风险框架声明（[AI-DRAFT]）',
+    humanDoes:'确认摘要标题、方法选择叙事、结论等关键框架声明',
+    skills:'paper-section-writer',
+    aiSuggestion:'论文章节草稿已完成，字数达标（每节≥800字），每个数字有≥3个讨论维度。3个框架声明确认：①摘要标题建议"基于MOEA/D的多目标资源分配优化模型"；②方法选择叙事需突出"为什么选MOEA/D而非NSGA-II"；③结论建议软化"全局最优"为"具有全局最优性证据"。',
+    blockReason:'关键框架声明未确认 或 字数不达标',
+    candidates:null },
+  g6: { id:'g6', label:'G6', name:'最终审计', sub:'3个auditor全PASS', type:'human', stage:'s7', risk:'critical', estTime:'10min',
+    desc:'【高阻塞】completeness-auditor + consistency-auditor + quality-assurance-auditor全部PASS才能提交。',
+    aiDoes:'3个auditor自动检查，生成审计报告',
+    humanDoes:'确认3个auditor全PASS，批准最终组装提交',
+    skills:'completeness-auditor, consistency-auditor, quality-assurance-auditor',
+    aiSuggestion:'3个auditor结果：①completeness — 15/15项通过，所有review文件存在且≥5项检查；②consistency — 23个数字全部匹配frozen_numbers.json，无rationale-laundering；③quality-assurance — 工作流完整，3条核心规则通过，无伪造引用。建议批准提交。',
+    blockReason:'任一auditor未PASS 或 存在阻塞性问题',
+    candidates:null },
+};
+
+// G3 代码审查（补充）
+gates.g3 = { id:'g3', label:'G3', name:'代码审查', sub:'review文件+≥5项检查', type:'auto', stage:'s3', risk:'high', estTime:'AI自动',
+  desc:'代码审查：生成review文件，≥5项具体检查，每项引用file:line，不等式约束方向表供人类核对。',
+  aiDoes:'自动生成review文件，≥5项检查，每项引用file:line，列出不等式约束方向表',
+  humanDoes:'审查不等式方向，可提出问题（不自动修正）',
+  skills:'code-reviewer, python/matlab-code-reviewer',
+  aiSuggestion:'代码审查已完成：①SEED=2026固定 ✓；②随机数生成可复现 ✓；③边界条件处理 ✓；④数值稳定性检查 ✓；⑤不等式约束方向表已生成（5个约束，方向待核对）。建议核对不等式方向后通过。',
+  blockReason:'review文件不存在 或 <5项检查 或 不等式方向未核对',
+  candidates:null };
+
+// 子检测项（挂在每个Gate下）
+const subChecks = {
+  g1: [
+    { name:'评价标准/成功定义非空', type:'semi', status:'pending' },
+    { name:'问题类型已确认（modeler_chosen_type）', type:'semi', status:'pending' },
+    { name:'因果关系/守恒定律声明已签署', type:'semi', status:'pending' },
+    { name:'输出物清单完整', type:'auto', status:'pending' },
+  ],
+  g2: [
+    { name:'每个候选有≤30行PoC代码', type:'auto', status:'pending' },
+    { name:'PoC在真实清洗数据上跑出具体数字', type:'auto', status:'pending' },
+    { name:'失败候选标记[REJECTED]并归档', type:'auto', status:'pending' },
+    { name:'≥1个候选通过PoC', type:'semi', status:'pending' },
+  ],
+  g25: [
+    { name:'已选择最终方法（choice非空）', type:'human', status:'pending' },
+    { name:'选择理由非空（modeler_rationale）', type:'human', status:'pending' },
+    { name:'理由非复制AI建议（anti-rubber-stamping）', type:'human', status:'pending' },
+    { name:'所有候选已标记（选/备/汰）', type:'human', status:'pending' },
+    { name:'决策已写入modeler-decision-logger', type:'auto', status:'pending' },
+  ],
+  g3: [
+    { name:'review文件存在（code/Qx/reviews/）', type:'auto', status:'pending' },
+    { name:'≥5项具体检查，每项引用file:line', type:'auto', status:'pending' },
+    { name:'SEED=2026固定，可复现', type:'auto', status:'pending' },
+    { name:'不等式约束方向表已生成', type:'auto', status:'pending' },
+    { name:'人类已核对不等式方向（不自动修正）', type:'semi', status:'pending' },
+  ],
+  g45: [
+    { name:'方法已分配[CHOSEN]/[BACKUP]/[REJECTED]', type:'human', status:'pending' },
+    { name:'稳定性置信度已确认（high/medium/needs_caution）', type:'human', status:'pending' },
+    { name:'判决理由非空', type:'human', status:'pending' },
+    { name:'稳健性检查≥5项（敏感性/误差/基线/扰动/初始值）', type:'auto', status:'pending' },
+    { name:'[REJECTED]方法已归档到workspace/archived/', type:'auto', status:'pending' },
+  ],
+  g4: [
+    { name:'frozen_numbers.json已生成', type:'auto', status:'pending' },
+    { name:'所有论文数字可追溯到脚本输出', type:'auto', status:'pending' },
+    { name:'人类已签署数字冻结', type:'semi', status:'pending' },
+    { name:'冻结后修改需记录并重新冻结', type:'auto', status:'pending' },
+  ],
+  g5: [
+    { name:'每节字数达标（word floor）', type:'auto', status:'pending' },
+    { name:'每个数字有≥3个讨论维度', type:'auto', status:'pending' },
+    { name:'摘要标题已确认', type:'semi', status:'pending' },
+    { name:'方法选择叙事已确认', type:'semi', status:'pending' },
+    { name:'结论框架声明已确认（软化"全局最优"）', type:'semi', status:'pending' },
+  ],
+  g6: [
+    { name:'completeness-auditor PASS（15/15项）', type:'auto', status:'pending' },
+    { name:'consistency-auditor PASS（数字/文件名/符号一致）', type:'auto', status:'pending' },
+    { name:'quality-assurance-auditor PASS（3条核心规则+反伪造）', type:'auto', status:'pending' },
+    { name:'所有decision artifact状态为DECIDED', type:'auto', status:'pending' },
+    { name:'人类批准最终组装提交', type:'human', status:'pending' },
+  ],
+};
+
+// 全局检测项（独立于Gate，跨阶段）
+const globalChecks = [
+  { id:'gc1', name:'数据质量检测', skill:'data-auditor-cleaner', type:'semi', stage:'s2', desc:'缺失值/异常值/类型错误/附件映射确认', status:'pending' },
+  { id:'gc2', name:'符号冲突检测', skill:'symbol-table-builder', type:'auto', stage:'s2', desc:'同一符号不同含义/未定义符号/单位不一致', status:'pending' },
+  { id:'gc3', name:'假设影响评估', skill:'model-assumptions-builder', type:'semi', stage:'s2', desc:'必要vs简化假设分类/假设失效边界/影响等级', status:'pending' },
+  { id:'gc4', name:'引用真实性核验', skill:'related-paper-analyzer', type:'auto', stage:'s1', desc:'不编造引用/DOI可追溯/文献与方法相关', status:'pending' },
+  { id:'gc5', name:'render_check 图表检测', skill:'math-figure-generator', type:'auto', stage:'s5', desc:'文字重叠/文字出框/字体<6.5pt/文字占框面积', status:'pending' },
+  { id:'gc6', name:'图表类型确认', skill:'figure-table-planner', type:'semi', stage:'s5', desc:'4类分类（诊断/对比/论文/附录）/核心声明确认', status:'pending' },
+  { id:'gc7', name:'文本检测', skill:'paper-polisher', type:'auto', stage:'s6', desc:'时态一致性/过度声明/公式编号一致', status:'pending' },
+  { id:'gc8', name:'引用完整性', skill:'reference-manager', type:'auto', stage:'s6', desc:'BibTeX生成/文内-文后对应/伪造引用阻塞', status:'pending' },
+  { id:'gc9', name:'决策状态检测', skill:'modeler-decision-logger', type:'auto', stage:'s7', desc:'所有decision artifact是否DECIDED', status:'pending' },
+  { id:'gc10', name:'Gate状态检测', skill:'workflow-orchestrator', type:'auto', stage:'s7', desc:'环境ping/按顺序检查/stale标记', status:'pending' },
+];
+
+const gateOrder = ['g1','g2','g25','g3','g45','g4','g5','g6'];
+let state = {};
+gateOrder.forEach(id => { state[id] = { status:'pending', verdict:null, rationale:'', startTime:null, endTime:null, duration:null }; });
+let selectedGate = 'g1';
+let notifications = [];
+let timeline = [];
+let channels = { inapp:true, feishu:false, email:false, highonly:true };
+let activeTab = 'notif';
+let sessionStart = Date.now();
+
+// ===== Init =====
+// ===== Persistence (localStorage) =====
+const STORAGE_KEY = 'mathmodel-decision-console-v1';
+
+function saveState() {
+  try {
+    const data = {
+      state: state,
+      subChecks: subChecks,
+      globalChecks: globalChecks,
+      notifications: notifications.slice(0, 50),
+      timeline: timeline.slice(0, 100),
+      channels: channels,
+      selectedGate: selectedGate,
+      savedAt: new Date().toISOString()
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch(e) { console.warn('Save failed:', e); }
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return false;
+    const data = JSON.parse(raw);
+    if (data.state) {
+      Object.keys(data.state).forEach(id => {
+        if (state[id]) {
+          state[id].status = data.state[id].status || 'pending';
+          state[id].verdict = data.state[id].verdict || null;
+          state[id].rationale = data.state[id].rationale || '';
+          state[id].startTime = data.state[id].startTime || null;
+          state[id].endTime = data.state[id].endTime || null;
+          state[id].duration = data.state[id].duration || null;
+        }
+      });
+    }
+    if (data.subChecks) {
+      Object.keys(data.subChecks).forEach(gid => {
+        if (subChecks[gid] && data.subChecks[gid]) {
+          data.subChecks[gid].forEach((c, i) => {
+            if (subChecks[gid][i]) subChecks[gid][i].status = c.status;
+          });
+        }
+      });
+    }
+    if (data.globalChecks) {
+      data.globalChecks.forEach((g, i) => {
+        if (globalChecks[i]) globalChecks[i].status = g.status;
+      });
+    }
+    if (data.notifications) notifications = data.notifications;
+    if (data.timeline) timeline = data.timeline;
+    if (data.channels) channels = {...channels, ...data.channels};
+    if (data.selectedGate && state[data.selectedGate]) selectedGate = data.selectedGate;
+    return true;
+  } catch(e) { console.warn('Load failed:', e); return false; }
+}
+
+function exportData() {
+  saveState();
+  const raw = localStorage.getItem(STORAGE_KEY);
+  const blob = new Blob([raw], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `decision-console-backup-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('success', '数据已导出为JSON备份');
+}
+
+function importData() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json';
+  input.onchange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const data = JSON.parse(ev.target.result);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        location.reload();
+      } catch(err) {
+        showToast('warning', '导入失败：文件格式不正确');
+      }
+    };
+    reader.readAsText(file);
+  };
+  input.click();
+}
+
+function resetAll() {
+  if (!confirm('确定要清空所有数据吗？此操作不可撤销。')) return;
+  localStorage.removeItem(STORAGE_KEY);
+  location.reload();
+}
+
+function init() {
+  const loaded = loadState();
+  renderSidebar();
+  renderPipeline();
+  renderDetail();
+  renderNotifications();
+  renderTimeline();
+  renderGlobalChecks();
+  updateStats();
+  updateClock();
+  setInterval(updateClock, 1000);
+  // Track start time for first gate (only if not loaded from storage)
+  if (!loaded || !state['g1'].startTime) {
+    state['g1'].startTime = Date.now();
+  }
+  // Keyboard shortcuts
+  document.addEventListener('keydown', handleKeyboard);
+  // Show keyboard hint on first load
+  if (!loaded) {
+    setTimeout(() => { document.getElementById('kbd-hint').classList.add('show'); setTimeout(()=>document.getElementById('kbd-hint').classList.remove('show'), 5000); }, 2000);
+    // Simulate initial notifications only on first load
+    setTimeout(() => addNotification('gate-trigger','G1 待决策','问题解析已完成，AI已起草评价标准和问题类型，等待人类确认。','09:15:00'), 500);
+    setTimeout(() => addNotification('info','工作流已启动','数模竞赛人工决策控制台已加载，8个Gate + 38子检测 + 10全局检测 = 共56项检测，其中3个为高阻塞人类决策Gate。','09:15:01'), 1200);
+    addTimelineEvent('info','会话开始','8个Gate + 38子检测 + 10全局检测 = 共56项检测已加载','-','-');
+  } else {
+    showToast('info', '已从本地恢复上次的决策状态');
+  }
+  saveState();
+}
+
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent = now.toTimeString().slice(0,8);
+}
+
+// ===== Sidebar =====
+function renderSidebar() {
+  const sb = document.getElementById('sidebar');
+  let html = '<div class="section-title">工作流阶段</div>';
+  stages.forEach((s, i) => {
+    const gateChips = s.gates.map(g => {
+      const st = state[g].status;
+      return `<div class="gate-chip ${st}"></div>`;
+    }).join('');
+    const isActive = s.gates.includes(selectedGate) || (s.gates.length===0 && i===2);
+    html += `<div class="stage-item ${isActive?'active':''}" onclick="selectStage('${s.id}')">
+      <div class="stage-num">STAGE 0${i+1}</div>
+      <div class="stage-name">${s.name}</div>
+      <div class="stage-gates">${gateChips}</div>
+    </div>`;
+  });
+  sb.innerHTML = html;
+}
+
+function selectStage(sid) {
+  const s = stages.find(x=>x.id===sid);
+  if (s && s.gates.length>0) selectGate(s.gates[0]);
+}
+
+// ===== Pipeline =====
+function renderPipeline() {
+  const row = document.getElementById('gate-row');
+  let html = '';
+  gateOrder.forEach(id => {
+    const g = gates[id];
+    const st = state[id].status;
+    html += `<div class="gate-node status-${st} ${id===selectedGate?'selected':''}" onclick="selectGate('${id}')">
+      <div class="risk-dot risk-${g.risk}"></div>
+      <div class="gate-icon ${g.type==='human'?'human':''}">${g.label}</div>
+      <div class="gate-label">${g.name}</div>
+      <div class="gate-sub">${g.type==='human'?'[人类决策]':'[自动确认]'} · ${g.estTime}</div>
+    </div>`;
+  });
+  row.innerHTML = html;
+  // Update active line
+  const passedCount = gateOrder.filter(id=>state[id].status==='pass').length;
+  const pct = (passedCount / gateOrder.length) * 100;
+  document.getElementById('progress-fill').style.width = pct + '%';
+  document.getElementById('progress-text').textContent = `${passedCount}/${gateOrder.length} 通过`;
+}
+
+// ===== Detail =====
+function renderDetail() {
+  const g = gates[selectedGate];
+  const st = state[selectedGate];
+  const panel = document.getElementById('detail-panel');
+
+  let statusClass = st.status;
+  let statusText = st.status==='pass'?'已通过':st.status==='block'?'已阻塞':'待决策';
+  const riskText = {critical:'极高风险',high:'高风险',medium:'中风险',low:'低风险'}[g.risk];
+  const durationText = st.duration ? formatDuration(st.duration) : '-';
+  const undoBtn = st.status==='pass' ? `<button class="undo-btn" onclick="undoGate('${selectedGate}')">↩ 撤销</button>` : '';
+
+  let blockReasonHtml = '';
+  if (st.status==='block' || (st.status==='pending' && g.risk==='critical')) {
+    blockReasonHtml = `<div class="block-reason">
+      <div class="br-label">阻断条件 / 不通过原因</div>
+      <div class="br-text">${g.blockReason}</div>
+    </div>`;
+  }
+
+  let candidatesHtml = '';
+  if (g.candidates) {
+    candidatesHtml = `<div class="verdict-section">
+      <div class="section-label">候选方法判决 <span class="tag">P0 · 每个候选必须标记</span></div>
+      <div class="candidates-list">`;
+    g.candidates.forEach(c => {
+      const vClass = c.verdict || 'none';
+      const vText = c.verdict ? c.verdict.toUpperCase() : '未标记';
+      candidatesHtml += `<div class="candidate-item ${c.verdict?'verdicted':''}">
+        <div class="cand-num">${c.id.toUpperCase()}</div>
+        <div class="cand-info">
+          <div class="cand-name">${c.name}</div>
+          <div class="cand-metric">${c.metric}</div>
+        </div>
+        <div class="cand-verdict ${vClass}">${vText}</div>
+        <div class="cand-actions">
+          <button class="cand-action-btn" onclick="setCandidate('${g.id}','${c.id}','chosen')">选</button>
+          <button class="cand-action-btn" onclick="setCandidate('${g.id}','${c.id}','backup')">备</button>
+          <button class="cand-action-btn" onclick="setCandidate('${g.id}','${c.id}','rejected')">汰</button>
+        </div>
+      </div>`;
+    });
+    candidatesHtml += `</div></div>`;
+  }
+
+  panel.innerHTML = `
+    <div class="detail-header">
+      <div class="gate-title">
+        <span class="gate-badge ${g.type}">${g.type==='human'?'[ 人类决策Gate ]':'[ 自动确认Gate ]'}</span>
+        <span class="risk-badge ${g.risk}">${riskText}</span>
+        <div>
+          <h3>${g.label} · ${g.name}</h3>
+          <div class="gate-desc">${g.desc}</div>
+          <div class="time-track">
+            <span>预计 <b>${g.estTime}</b></span>
+            <span>实际 <b>${durationText}</b></span>
+            ${st.endTime ? `<span>完成 <b>${new Date(st.endTime).toTimeString().slice(0,8)}</b></span>` : ''}
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;">
+        <span class="status-badge ${statusClass}">${statusText}</span>
+        ${undoBtn}
+      </div>
+    </div>
+    <div class="detail-body">
+      ${blockReasonHtml}
+      <div class="detail-grid">
+        <div class="info-card">
+          <div class="card-label">AI 负责</div>
+          <div class="card-content">${g.aiDoes}</div>
+        </div>
+        <div class="info-card">
+          <div class="card-label">人类负责</div>
+          <div class="card-content">${g.humanDoes}</div>
+        </div>
+        <div class="info-card">
+          <div class="card-label">涉及 Skill</div>
+          <div class="card-content" style="font-family:var(--mono);font-size:12px;">${g.skills}</div>
+        </div>
+        <div class="info-card">
+          <div class="card-label">决策 Artifact</div>
+          <div class="card-content" style="font-family:var(--mono);font-size:11px;word-break:break-all;">methods/Qx/decisions/${g.id}_modeler_decision.md</div>
+        </div>
+      </div>
+      <div class="ai-suggestion">
+        <div class="suggestion-label">AI 建议 [AI-SUGGESTED — not a verdict]</div>
+        <div class="suggestion-text">${g.aiSuggestion}</div>
+      </div>
+      ${candidatesHtml}
+      <div class="verdict-section">
+        <div class="section-label">三值判决 <span class="tag">P0 · Accept / Edit / Reject</span></div>
+        <div class="verdict-buttons">
+          <button class="verdict-btn ${st.verdict==='accept'?'selected accept':''}" onclick="setVerdict('${selectedGate}','accept')">
+            <div class="v-icon">✓</div>
+            <div class="v-label">Accept</div>
+            <div class="v-desc">接受AI建议</div>
+          </button>
+          <button class="verdict-btn ${st.verdict==='edit'?'selected edit':''}" onclick="setVerdict('${selectedGate}','edit')">
+            <div class="v-icon">✎</div>
+            <div class="v-label">Edit</div>
+            <div class="v-desc">修改后接受</div>
+          </button>
+          <button class="verdict-btn ${st.verdict==='reject'?'selected reject':''}" onclick="setVerdict('${selectedGate}','reject')">
+            <div class="v-icon">✕</div>
+            <div class="v-label">Reject</div>
+            <div class="v-desc">拒绝，另选</div>
+          </button>
+        </div>
+        <div class="rationale-input ${st.verdict?'show':''}" id="rationale-input">
+          <textarea placeholder="${st.verdict==='accept'?'Accept可简短：如"确认"、"同意AI建议"（至少2字）...':'用自己的话填写决策理由（Edit需说明修改了什么，Reject需说明为什么拒绝，至少10字，复制AI建议将不通过Gate）...'}">${st.rationale}</textarea>
+          <button class="submit-verdict" onclick="submitVerdict('${selectedGate}')" ${canSubmit()?'':'disabled'}>
+            提交判决 · 通过 ${g.label} ${st.verdict==='accept'?'(理由可简短)':''}
+          </button>
+        </div>
+      </div>
+      ${renderSubChecks(selectedGate)}
+    </div>`;
+}
+
+function renderSubChecks(gateId) {
+  const checks = subChecks[gateId] || [];
+  const passed = checks.filter(c => c.status==='pass').length;
+  const total = checks.length;
+  const allPass = passed === total;
+  return `<div class="subcheck-section">
+    <div class="subcheck-header" onclick="this.nextElementSibling.classList.toggle('show'); this.querySelector('.sc-toggle').textContent=this.nextElementSibling.classList.contains('show')?'收起 ▲':'展开 ▼';">
+      <div class="sc-title">子检测项 <span class="sc-count">${passed}/${total} 通过 ${allPass?'<span style="color:var(--green)">✓</span>':''}</span></div>
+      <div class="sc-toggle">展开 ▼</div>
+    </div>
+    <div class="subcheck-list">
+      ${checks.map((c,i) => `
+        <div class="subcheck-item" onclick="toggleSubCheck('${gateId}',${i})">
+          <div class="sc-status ${c.status}">${c.status==='pass'?'✓':c.status==='fail'?'✕':'–'}</div>
+          <div class="sc-name">${c.name}</div>
+          <div class="sc-type ${c.type}">${c.type==='auto'?'自动':c.type==='semi'?'半自动':'人类'}</div>
+        </div>
+      `).join('')}
+    </div>
+  </div>`;
+}
+
+function toggleSubCheck(gateId, idx) {
+  const c = subChecks[gateId][idx];
+  c.status = c.status==='pass' ? 'pending' : 'pass';
+  renderDetail();
+  updateStats();
+  saveState();
+}
+
+function canSubmit() {
+  const st = state[selectedGate];
+  if (!st.verdict) return false;
+  if (selectedGate === 'g25') {
+    const g = gates['g25'];
+    return g.candidates.every(c => c.verdict !== null);
+  }
+  return true;
+}
+
+function selectGate(id) {
+  selectedGate = id;
+  if (!state[id].startTime && state[id].status==='pending') {
+    state[id].startTime = Date.now();
+  }
+  renderSidebar();
+  renderPipeline();
+  renderDetail();
+}
+
+function setVerdict(gateId, verdict) {
+  state[gateId].verdict = verdict;
+  renderDetail();
+  saveState();
+}
+
+function setCandidate(gateId, candId, verdict) {
+  const g = gates[gateId];
+  const c = g.candidates.find(x=>x.id===candId);
+  c.verdict = verdict;
+  renderDetail();
+  saveState();
+  showToast('info', `候选 ${c.name} → ${verdict.toUpperCase()}`);
+}
+
+function submitVerdict(gateId) {
+  const st = state[gateId];
+  const g = gates[gateId];
+  const rationale = document.querySelector('#rationale-input textarea').value;
+  st.rationale = rationale;
+
+  // Check for copy-paste (P0 anti-rubber-stamping)
+  // Accept可简短（接受本身就是确认），Edit/Reject需详细理由
+  const minLen = st.verdict === 'accept' ? 2 : 10;
+  if (rationale.length < minLen) {
+    const hint = st.verdict === 'accept' ? 'Accept可简短，至少2字（如"确认"）' : '理由过短，请用自己的话详细说明（至少10字）';
+    showToast('warning', hint);
+    return;
+  }
+
+  st.status = 'pass';
+  st.endTime = Date.now();
+  st.duration = st.startTime ? st.endTime - st.startTime : 0;
+  const now = new Date().toTimeString().slice(0,8);
+  addNotification('gate-pass', `${g.label} 已通过`, `判决：${st.verdict.toUpperCase()}。${g.candidates?'候选方法已全部标记。':''}理由已记录到decision artifact。`, now);
+  addTimelineEvent('pass', `${g.label} 通过`, `判决：${st.verdict.toUpperCase()}，耗时${formatDuration(st.duration)}`, g.label, st.verdict);
+
+  if (st.verdict === 'accept') {
+    showToast('success', `${g.label} 通过 · Accept AI建议`);
+  } else if (st.verdict === 'edit') {
+    showToast('success', `${g.label} 通过 · 已修改AI建议`);
+  } else {
+    showToast('success', `${g.label} 通过 · 已拒绝AI建议，人类另选`);
+  }
+
+  renderSidebar();
+  renderPipeline();
+  renderDetail();
+  updateStats();
+  saveState();
+
+  // Auto-advance to next pending gate
+  const nextIdx = gateOrder.indexOf(gateId) + 1;
+  if (nextIdx < gateOrder.length) {
+    setTimeout(() => {
+      selectGate(gateOrder[nextIdx]);
+      addNotification('gate-trigger', `${gates[gateOrder[nextIdx]].label} 待决策`, `${gates[gateOrder[nextIdx]].name} — ${gates[gateOrder[nextIdx]].sub}`, new Date().toTimeString().slice(0,8));
+    }, 800);
+  } else {
+    setTimeout(() => showToast('success', '所有Gate已通过！可以提交论文了'), 500);
+  }
+}
+
+// ===== Notifications (P3) =====
+function addNotification(type, title, desc, time) {
+  const g = gates[selectedGate];
+  // Filter: if highonly and this is not a human gate, skip external channels
+  const isHumanGate = title.includes('G2.5') || title.includes('G4.5') || title.includes('G6');
+  if (channels.highonly && !isHumanGate && type==='gate-trigger') {
+    // Still show in-app but mark as filtered
+  }
+  notifications.unshift({ type, title, desc, time, id:Date.now() });
+  if (notifications.length > 50) notifications.pop();
+  renderNotifications();
+
+  // External channel simulation
+  if (channels.feishu && (isHumanGate || !channels.highonly)) {
+    console.log('[Feishu Push]', title, desc);
+  }
+  if (channels.email && (isHumanGate || !channels.highonly)) {
+    console.log('[Email]', title, desc);
+  }
+}
+
+function renderNotifications() {
+  const list = document.getElementById('notif-list');
+  document.getElementById('notif-count').textContent = notifications.filter(n=>n.type==='gate-trigger').length;
+  if (notifications.length === 0) {
+    list.innerHTML = '<div style="padding:40px 20px;text-align:center;color:var(--text-muted);font-size:12px;">暂无通知</div>';
+    return;
+  }
+  list.innerHTML = notifications.map(n => {
+    const channelTags = [];
+    if (channels.inapp) channelTags.push('<span class="notif-channel">站内</span>');
+    if (channels.feishu) channelTags.push('<span class="notif-channel">飞书</span>');
+    if (channels.email) channelTags.push('<span class="notif-channel">邮件</span>');
+    return `<div class="notif-item ${n.type}" onclick="notifClick('${n.title}')">
+      <div class="notif-title">${n.title}${channelTags.join('')}</div>
+      <div class="notif-desc">${n.desc}</div>
+      <div class="notif-time">${n.time}</div>
+    </div>`;
+  }).join('');
+}
+
+function notifClick(title) {
+  // Find gate from title
+  const match = title.match(/G\d+\.?\d*/);
+  if (match) {
+    const gateId = match[0].replace('.','');
+    if (gates[gateId]) selectGate(gateId);
+  }
+}
+
+function clearNotifications() {
+  notifications = [];
+  renderNotifications();
+  showToast('info', '通知已清空');
+}
+
+function toggleChannel(el, ch) {
+  el.classList.toggle('on');
+  channels[ch] = el.classList.contains('on');
+  saveState();
+  const names = { inapp:'站内通知', feishu:'飞书推送', email:'邮件提醒', highonly:'仅高阻塞Gate' };
+  showToast('info', `${names[ch]} ${channels[ch]?'已开启':'已关闭'}`);
+}
+
+// ===== Stats =====
+function updateStats() {
+  const gatePass = gateOrder.filter(id=>state[id].status==='pass').length;
+  const subPass = Object.values(subChecks).flat().filter(c=>c.status==='pass').length;
+  const subTotal = Object.values(subChecks).flat().length;
+  const globalPass = globalChecks.filter(g=>g.status==='pass').length;
+  const accept = gateOrder.filter(id=>state[id].verdict==='accept').length;
+  const edit = gateOrder.filter(id=>state[id].verdict==='edit').length;
+  const reject = gateOrder.filter(id=>state[id].verdict==='reject').length;
+  const el = id => document.getElementById(id);
+  if (el('stat-gate')) el('stat-gate').textContent = `${gatePass}/8`;
+  if (el('stat-sub')) el('stat-sub').textContent = `${subPass}/${subTotal}`;
+  if (el('stat-global')) el('stat-global').textContent = `${globalPass}/10`;
+  if (el('stat-accept')) el('stat-accept').textContent = accept;
+  if (el('stat-edit')) el('stat-edit').textContent = edit;
+  if (el('stat-reject')) el('stat-reject').textContent = reject;
+}
+
+// ===== Toast =====
+function showToast(type, msg) {
+  const container = document.getElementById('toast-container');
+  const toast = document.createElement('div');
+  toast.className = 'toast ' + type;
+  toast.textContent = msg;
+  container.appendChild(toast);
+  setTimeout(() => { toast.style.opacity='0'; toast.style.transform='translateX(100%)'; setTimeout(()=>toast.remove(),300); }, 3000);
+}
+
+// ===== New Optimizations =====
+
+function formatDuration(ms) {
+  if (!ms || ms < 1000) return '<1s';
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return s + 's';
+  const m = Math.floor(s / 60);
+  const rs = s % 60;
+  return m + 'm' + (rs > 0 ? rs + 's' : '');
+}
+
+function undoGate(gateId) {
+  const st = state[gateId];
+  const g = gates[gateId];
+  if (st.status !== 'pass') return;
+  st.status = 'pending';
+  st.verdict = null;
+  st.rationale = '';
+  st.endTime = null;
+  st.duration = null;
+  if (g.candidates) g.candidates.forEach(c => c.verdict = null);
+  addTimelineEvent('info', `${g.label} 已撤销`, `Gate状态回退为待决策，判决已清除`, g.label, 'undo');
+  showToast('info', `${g.label} 已撤销，可重新判决`);
+  renderSidebar();
+  renderPipeline();
+  renderDetail();
+  updateStats();
+  saveState();
+}
+
+function switchTab(tab) {
+  activeTab = tab;
+  document.getElementById('tab-notif').classList.toggle('active', tab==='notif');
+  document.getElementById('tab-timeline').classList.toggle('active', tab==='timeline');
+  document.getElementById('panel-notif').style.display = tab==='notif' ? 'block' : 'none';
+  document.getElementById('panel-timeline').style.display = tab==='timeline' ? 'block' : 'none';
+}
+
+function addTimelineEvent(type, title, desc, gate, verdict) {
+  timeline.unshift({
+    type, title, desc, gate, verdict,
+    time: new Date().toTimeString().slice(0,8),
+    id: Date.now()
+  });
+  if (timeline.length > 100) timeline.pop();
+  renderTimeline();
+}
+
+function renderTimeline() {
+  const list = document.getElementById('timeline-list');
+  if (!list) return;
+  if (timeline.length === 0) {
+    list.innerHTML = '<div style="padding:40px 20px;text-align:center;color:var(--text-muted);font-size:12px;">暂无决策记录</div>';
+    return;
+  }
+  list.innerHTML = timeline.map(e => {
+    const dotClass = e.type==='pass' ? 'pass' : e.type==='decision' ? 'decision' : 'info';
+    const verdictTag = e.verdict && e.verdict !== '-' && e.verdict !== 'undo' ?
+      `<span style="font-family:var(--mono);font-size:9px;padding:1px 5px;border-radius:3px;background:var(--bg-deep);color:var(--text-muted);">${e.verdict.toUpperCase()}</span>` : '';
+    return `<div class="timeline-item">
+      <div class="timeline-dot ${dotClass}">${e.type==='pass'?'✓':e.type==='decision'?'◆':'i'}</div>
+      <div class="timeline-content">
+        <div class="timeline-title">${e.title} ${verdictTag}</div>
+        <div class="timeline-desc">${e.desc}</div>
+        <div class="timeline-meta">
+          <span>${e.time}</span>
+          ${e.gate !== '-' ? `<span>Gate: ${e.gate}</span>` : ''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderGlobalChecks() {
+  const list = document.getElementById('gc-list');
+  const count = document.getElementById('gc-count');
+  if (!list) return;
+  const passed = globalChecks.filter(g => g.status==='pass').length;
+  if (count) count.textContent = `${passed}/${globalChecks.length}`;
+  list.innerHTML = globalChecks.map((g,i) => `
+    <div class="gc-item" onclick="toggleGlobalCheck(${i})" title="${g.desc}">
+      <div class="gc-dot ${g.status}"></div>
+      <div class="gc-name">${g.name}</div>
+      <div class="gc-skill">${g.skill}</div>
+    </div>
+  `).join('');
+}
+
+function toggleGlobalCheck(idx) {
+  const g = globalChecks[idx];
+  g.status = g.status==='pass' ? 'pending' : 'pass';
+  renderGlobalChecks();
+  updateStats();
+  saveState();
+  showToast('info', `${g.name}: ${g.status==='pass'?'通过':'待检测'}`);
+}
+
+function handleKeyboard(e) {
+  // Don't intercept when typing in textarea
+  if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
+
+  const idx = gateOrder.indexOf(selectedGate);
+
+  switch(e.key) {
+    case 'ArrowRight':
+    case 'ArrowDown':
+      e.preventDefault();
+      if (idx < gateOrder.length - 1) selectGate(gateOrder[idx + 1]);
+      break;
+    case 'ArrowLeft':
+    case 'ArrowUp':
+      e.preventDefault();
+      if (idx > 0) selectGate(gateOrder[idx - 1]);
+      break;
+    case '1':
+      setVerdict(selectedGate, 'accept');
+      showToast('info', '选择 Accept');
+      break;
+    case '2':
+      setVerdict(selectedGate, 'edit');
+      showToast('info', '选择 Edit');
+      break;
+    case '3':
+      setVerdict(selectedGate, 'reject');
+      showToast('info', '选择 Reject');
+      break;
+    case 'Enter':
+      if (canSubmit()) {
+        e.preventDefault();
+        submitVerdict(selectedGate);
+      }
+      break;
+    case 'u':
+    case 'U':
+      if (state[selectedGate].status === 'pass') {
+        undoGate(selectedGate);
+      }
+      break;
+    case '?':
+      const hint = document.getElementById('kbd-hint');
+      hint.classList.toggle('show');
+      setTimeout(() => hint.classList.remove('show'), 5000);
+      break;
+    case 'n':
+    case 'N':
+      switchTab('notif');
+      break;
+    case 't':
+    case 'T':
+      switchTab('timeline');
+      break;
+  }
+}
+
+init();
+
+// Register Service Worker for PWA offline support
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch((err) => {
+      console.warn('SW registration failed:', err);
+    });
+  });
+}
+</script>
+</body>
+</html>

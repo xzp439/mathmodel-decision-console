@@ -1,0 +1,18 @@
+{
+  "name": "数模竞赛人工决策控制台",
+  "short_name": "决策控制台",
+  "description": "数模竞赛工作流人工决策控制台，8个Gate + 56项检测，三值判决，审计时间线",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0a0e1a",
+  "theme_color": "#0a0e1a",
+  "orientation": "landscape",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
