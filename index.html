@@ -179,6 +179,144 @@ body { min-width:1280px; }
 .file-preview-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--bg-card); }
 .file-preview-content > *:not(.file-preview-header) { padding: 16px; overflow: auto; }
 
+/* Splash / Welcome Screen */
+.splash-screen {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: var(--bg-deep);
+  z-index: 5000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.5s ease, visibility 0.5s ease;
+}
+.splash-screen.hide {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+.splash-logo {
+  width: 96px;
+  height: 96px;
+  margin-bottom: 24px;
+  animation: splashPulse 2s ease-in-out infinite;
+}
+@keyframes splashPulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.05); opacity: 0.85; }
+}
+.splash-title {
+  font-size: 28px;
+  font-weight: 900;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+  letter-spacing: 1px;
+}
+.splash-subtitle {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 40px;
+  text-align: center;
+  max-width: 400px;
+  line-height: 1.6;
+}
+.splash-stats {
+  display: flex;
+  gap: 32px;
+  margin-bottom: 40px;
+}
+.splash-stat {
+  text-align: center;
+}
+.splash-stat-num {
+  font-family: var(--mono);
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.splash-stat-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.splash-start-btn {
+  position: relative;
+  padding: 14px 48px;
+  font-size: 16px;
+  font-weight: 700;
+  font-family: var(--sans);
+  background: var(--accent);
+  color: #000;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  overflow: hidden;
+}
+.splash-start-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(245,158,11,0.3);
+}
+.splash-start-btn:active {
+  transform: translateY(0);
+}
+.splash-start-btn::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.3);
+  transform: translate(-50%, -50%);
+  transition: width 0.6s ease, height 0.6s ease;
+}
+.splash-start-btn:active::before {
+  width: 300px;
+  height: 300px;
+}
+.splash-footer {
+  position: absolute;
+  bottom: 24px;
+  font-size: 11px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.splash-footer label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.splash-footer input[type="checkbox"] {
+  accent-color: var(--accent);
+}
+.splash-ripple {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: var(--bg-deep);
+  transform: translate(-50%, -50%);
+  z-index: 4999;
+  pointer-events: none;
+}
+.splash-ripple.expand {
+  animation: rippleExpand 0.6s ease-out forwards;
+}
+@keyframes rippleExpand {
+  0% { width: 0; height: 0; opacity: 1; }
+  100% { width: 300vmax; height: 300vmax; opacity: 0; }
+}
+
 .sidebar { background:var(--bg-panel); border-right:1px solid var(--border); overflow-y:auto; padding:16px 0; }
 .sidebar .section-title { padding:8px 20px; font-size:11px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-muted); }
 .stage-item { padding:10px 20px; cursor:pointer; border-left:3px solid transparent; transition:all 0.15s; }
@@ -427,6 +565,33 @@ body { min-width:1280px; }
 </style>
 </head>
 <body>
+
+<!-- Splash / Welcome Screen -->
+<div class="splash-screen" id="splash-screen">
+  <svg class="splash-logo" viewBox="0 0 512 512" fill="none">
+    <rect x="64" y="64" width="384" height="384" rx="64" stroke="var(--accent)" stroke-width="8"/>
+    <circle cx="160" cy="192" r="36" stroke="#22c55e" stroke-width="6"/>
+    <circle cx="352" cy="192" r="36" stroke="var(--accent)" stroke-width="6"/>
+    <circle cx="256" cy="320" r="36" stroke="#a855f7" stroke-width="6"/>
+    <line x1="196" y1="192" x2="316" y2="192" stroke="#3d4f6e" stroke-width="4" stroke-dasharray="8,6"/>
+    <line x1="175" y1="220" x2="237" y2="292" stroke="#3d4f6e" stroke-width="4" stroke-dasharray="8,6"/>
+    <line x1="337" y1="220" x2="275" y2="292" stroke="#3d4f6e" stroke-width="4" stroke-dasharray="8,6"/>
+  </svg>
+  <div class="splash-title">数模竞赛人工决策控制台</div>
+  <div class="splash-subtitle">8个决策Gate · 38项子检测 · 10项全局检测<br>三值判决体系 · 完整审计时间线 · 本地文件库</div>
+  <div class="splash-stats">
+    <div class="splash-stat"><div class="splash-stat-num">56</div><div class="splash-stat-label">检测项</div></div>
+    <div class="splash-stat"><div class="splash-stat-num">3</div><div class="splash-stat-label">高阻塞Gate</div></div>
+    <div class="splash-stat"><div class="splash-stat-num">100%</div><div class="splash-stat-label">本地存储</div></div>
+  </div>
+  <button class="splash-start-btn" onclick="startApp()">开始工作</button>
+  <div class="splash-footer">
+    <label><input type="checkbox" id="splash-skip"> 下次直接进入</label>
+    <span>v5.0 · IndexedDB · PWA</span>
+  </div>
+</div>
+<div class="splash-ripple" id="splash-ripple"></div>
+
 <div class="app">
   <!-- Topbar -->
   <div class="topbar">
@@ -1156,6 +1321,8 @@ const commands = [
   { icon: '?', label: '显示键盘快捷键帮助', action: () => { const h=document.getElementById('kbd-hint'); h.classList.add('show'); setTimeout(()=>h.classList.remove('show'),8000); }, shortcut: '?', section: '帮助' },
   { icon: '▤', label: '切换到通知面板', action: () => switchTab('notif'), shortcut: 'N', section: '面板切换' },
   { icon: '⏱', label: '切换到审计时间线', action: () => switchTab('timeline'), shortcut: 'T', section: '面板切换' },
+  { icon: '📁', label: '切换到文件库', action: () => switchTab('files'), shortcut: 'F', section: '面板切换' },
+  { icon: '🏠', label: '显示启动页', action: () => { localStorage.removeItem('splashSkipped'); showSplash(); }, shortcut: '', section: '外观' },
 ];
 
 let cmdActiveIndex = 0;
@@ -1222,15 +1389,55 @@ function handleCmdKey(e) {
 
 // Global keyboard shortcuts for command palette
 document.addEventListener('keydown', (e) => {
+  // Splash screen shortcuts
+  const splash = document.getElementById('splash-screen');
+  if (splash && !splash.classList.contains('hide')) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      startApp();
+      return;
+    }
+  }
   if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); openCommandPalette(); }
   if ((e.ctrlKey || e.metaKey) && e.key === 't') { e.preventDefault(); toggleTheme(); }
 });
+
+// ===== Splash Screen =====
+function startApp() {
+  const skip = document.getElementById('splash-skip').checked;
+  if (skip) localStorage.setItem('splashSkipped', 'true');
+  
+  // Ripple effect
+  const ripple = document.getElementById('splash-ripple');
+  ripple.classList.add('expand');
+  
+  // Hide splash after ripple starts
+  setTimeout(() => {
+    document.getElementById('splash-screen').classList.add('hide');
+  }, 200);
+  
+  // Clean up ripple
+  setTimeout(() => {
+    ripple.remove();
+  }, 800);
+}
+
+function showSplash() {
+  document.getElementById('splash-screen').classList.remove('hide');
+}
 
 function init() {
   applyTheme(currentTheme);
   initFileDB().then(() => {
     if (activeTab === 'files') renderFilePanel();
   }).catch(err => console.warn('File DB init failed:', err));
+  
+  // Check if splash should be shown
+  const splashSkipped = localStorage.getItem('splashSkipped') === 'true';
+  if (splashSkipped) {
+    document.getElementById('splash-screen').classList.add('hide');
+  }
+  
   const loaded = loadState();
   renderSidebar();
   renderPipeline();
