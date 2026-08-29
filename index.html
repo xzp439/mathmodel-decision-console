@@ -11,7 +11,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="stylesheet" href="https://miaoda.feishu.cn/fonts/css2?family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="skills-full.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script src="skill-index.js"></script>
+<script src="skills-full.js" async></script>
 <script>
   if (typeof pdfjsLib !== 'undefined') {
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -1080,6 +1082,7 @@ body { min-width:1280px; }
       <div class="tab active" id="tab-notif" onclick="switchTab('notif')">通知中心</div>
       <div class="tab" id="tab-timeline" onclick="switchTab('timeline')">决策审计</div>
       <div class="tab" id="tab-files" onclick="switchTab('files')">文件库</div>
+      <div class="tab" id="tab-skills" onclick="switchTab('skills')">Skill库</div>
     </div>
     <div id="panel-notif">
       <div class="notif-header">
@@ -1093,6 +1096,24 @@ body { min-width:1280px; }
     </div>
     <div id="panel-files" style="display:none;">
       <div id="file-panel-content">加载中...</div>
+    </div>
+
+    <div id="panel-skills" style="display:none;">
+      <div style="padding:12px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+          <h4 style="margin:0;font-size:14px;">Skill 库 <span style="color:var(--text-muted);font-weight:400;font-size:11px;" id="skill-count">29个</span></h4>
+          <span style="font-size:10px;color:var(--text-muted);font-family:var(--mono);">渐进式披露</span>
+        </div>
+        <input type="text" id="skill-search" placeholder="搜索 skill 或关键词..." style="width:100%;padding:8px 10px;background:var(--bg-card);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);font-size:12px;margin-bottom:10px;box-sizing:border-box;" oninput="filterSkills()">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;" id="skill-category-filters"></div>
+        <div id="skill-list" style="max-height:400px;overflow-y:auto;"></div>
+        <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);">
+          <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">智能匹配：输入任务描述，自动推荐相关 skill</div>
+          <textarea id="skill-match-input" placeholder="例如：我要分析数据并选一个预测模型..." style="width:100%;padding:8px;background:var(--bg-card);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);font-size:11px;resize:vertical;min-height:50px;box-sizing:border-box;"></textarea>
+          <button onclick="matchSkillsFromInput()" style="margin-top:6px;padding:6px 12px;background:var(--accent);color:#fff;border:none;border-radius:6px;font-size:11px;cursor:pointer;">智能推荐</button>
+          <div id="skill-match-result" style="margin-top:8px;"></div>
+        </div>
+      </div>
     </div>
 
     <div class="stats-section">
@@ -1879,12 +1900,58 @@ async function extractPdfText(fileId) {
   }
 }
 
+// ===== Universal Text Extraction (PDF + DOCX) =====
+async function extractTextFromFile(file) {
+  const arrayBuffer = await file.blob.arrayBuffer();
+  const isPdf = file.type === 'application/pdf' || file.name.endsWith('.pdf');
+  const isDocx = file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || file.name.endsWith('.docx');
+  const isDoc = file.name.endsWith('.doc');
+  
+  if (isPdf) {
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    let text = '';
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items.map(item => item.str).join(' ');
+      text += `\n\n--- 第 ${i} 页 ---\n${pageText}`;
+    }
+    return { text, pages: pdf.numPages, type: 'pdf' };
+  }
+  
+  if (isDocx || isDoc) {
+    if (typeof mammoth !== 'undefined') {
+      const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
+      return { text: result.value, pages: 1, type: 'docx', messages: result.messages };
+    } else {
+      throw new Error('mammoth.js 未加载，无法解析 DOCX 文件');
+    }
+  }
+  
+  // 尝试作为文本文件读取
+  try {
+    const text = await file.blob.text();
+    return { text, pages: 1, type: 'text' };
+  } catch(e) {
+    throw new Error('不支持的文件格式：' + file.name);
+  }
+}
+
+function isProblemFile(f) {
+  return f.category === 'problem' && (
+    f.type === 'application/pdf' || f.name.endsWith('.pdf') ||
+    f.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || 
+    f.name.endsWith('.docx') || f.name.endsWith('.doc') ||
+    f.type.startsWith('text/') || f.name.match(/\.(txt|md)$/i)
+  );
+}
+
 async function extractAllProblemText() {
   const files = await getAllFiles();
-  const problemFiles = files.filter(f => f.category === 'problem' && (f.type === 'application/pdf' || f.name.endsWith('.pdf')));
+  const problemFiles = files.filter(isProblemFile);
   
   if (problemFiles.length === 0) {
-    showToast('warning', '没有找到比赛题目PDF文件');
+    showToast('warning', '没有找到比赛题目文件（支持 PDF/DOCX/TXT）');
     return;
   }
   
@@ -1892,27 +1959,29 @@ async function extractAllProblemText() {
   
   let allText = '';
   let totalPages = 0;
+  let successCount = 0;
+  let failCount = 0;
   
   for (const f of problemFiles) {
     try {
-      const arrayBuffer = await f.blob.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-      totalPages += pdf.numPages;
-      let fileText = `\n\n========== 文件：${f.name} ==========\n`;
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const textContent = await page.getTextContent();
-        const pageText = textContent.items.map(item => item.str).join(' ');
-        fileText += `\n\n--- 第 ${i} 页 ---\n${pageText}`;
-      }
-      allText += fileText;
+      const result = await extractTextFromFile(f);
+      totalPages += result.pages || 1;
+      allText += `\n\n========== 文件：${f.name} ==========\n${result.text}`;
+      successCount++;
     } catch (err) {
       console.error('Error extracting', f.name, err);
+      failCount++;
+      allText += `\n\n========== 文件：${f.name} ==========\n[解析失败：${err.message}]`;
     }
   }
   
-  showExtractedText(`全部题目（${problemFiles.length}个文件，${totalPages}页）`, allText, totalPages);
-  showToast('success', `解析完成：${problemFiles.length}个文件，${totalPages}页`);
+  showExtractedText(`全部题目（${successCount}个成功${failCount > 0 ? '，' + failCount + '个失败' : ''}，${totalPages}页）`, allText, totalPages);
+  
+  if (failCount > 0) {
+    showToast('warning', `解析完成：${successCount}个成功，${failCount}个失败`);
+  } else {
+    showToast('success', `解析完成：${successCount}个文件，${totalPages}页`);
+  }
 }
 
 let currentExtractedText = '';
@@ -2221,22 +2290,26 @@ async function testAiConnection() {
 }
 
 async function aiAnalyzeProblem() {
-  // Check settings
-  if (!aiSettings.apiKey) {
+  // Check settings - skip API Key validation for local providers (Ollama/LM Studio)
+  const isLocalProvider = aiSettings.defaultProvider === 'ollama' || aiSettings.defaultProvider === 'lmstudio' || 
+                          (aiSettings.baseUrl && (aiSettings.baseUrl.includes('localhost') || aiSettings.baseUrl.includes('127.0.0.1')));
+  
+  if (!isLocalProvider && !aiSettings.apiKey) {
     loadAiSettings();
-    if (!aiSettings.apiKey) {
+    const stillLocal = aiSettings.defaultProvider === 'ollama' || aiSettings.defaultProvider === 'lmstudio';
+    if (!stillLocal && !aiSettings.apiKey) {
       showToast('warning', '请先在顶部栏「⚙️ AI」中配置API Key');
       openAiSettings();
       return;
     }
   }
   
-  // Get problem files
+  // Get problem files (supports PDF/DOCX/TXT)
   const files = await getAllFiles();
-  const problemFiles = files.filter(f => f.category === 'problem' && (f.type === 'application/pdf' || f.name.endsWith('.pdf')));
+  const problemFiles = files.filter(isProblemFile);
   
   if (problemFiles.length === 0) {
-    showToast('warning', '请先在「比赛题目」分类上传题目PDF');
+    showToast('warning', '请先在「比赛题目」分类上传题目文件（支持 PDF/DOCX/TXT）');
     return;
   }
   
@@ -2246,26 +2319,32 @@ async function aiAnalyzeProblem() {
   resultBody.innerHTML = `<div class="ai-analysis-loading">
     <div class="ai-spinner"></div>
     <div class="ai-loading-text">AI 正在分析题目，请稍候...</div>
-    <div class="ai-loading-step" id="ai-loading-step">步骤 1/3：提取题目文本</div>
+    <div class="ai-loading-step" id="ai-loading-step">步骤 1/3：提取题目文本（0/${problemFiles.length}）</div>
   </div>`;
   document.getElementById('ai-result-modal').classList.add('show');
   
   try {
-    // Step 1: Extract text
+    // Step 1: Extract text (supports PDF + DOCX + TXT)
     let allText = '';
-    for (const f of problemFiles) {
-      const arrayBuffer = await f.blob.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-      let fileText = `\n\n========== 文件：${f.name} ==========\n`;
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const textContent = await page.getTextContent();
-        fileText += textContent.items.map(item => item.str).join(' ');
+    let extractedCount = 0;
+    for (let i = 0; i < problemFiles.length; i++) {
+      const f = problemFiles[i];
+      document.getElementById('ai-loading-step').textContent = `步骤 1/3：提取题目文本（${i+1}/${problemFiles.length}）- ${f.name}`;
+      try {
+        const result = await extractTextFromFile(f);
+        allText += `\n\n========== 文件：${f.name} ==========\n${result.text}`;
+        extractedCount++;
+      } catch (err) {
+        console.error('Error extracting', f.name, err);
+        allText += `\n\n========== 文件：${f.name} ==========\n[解析失败：${err.message}]`;
       }
-      allText += fileText;
     }
     
-    document.getElementById('ai-loading-step').textContent = '步骤 2/3：调用AI分析中...';
+    if (extractedCount === 0) {
+      throw new Error('所有文件解析失败，请检查文件格式');
+    }
+    
+    document.getElementById('ai-loading-step').textContent = `步骤 2/3：调用AI分析中...（已提取 ${allText.length} 字）`;
     
     // Step 2: Call AI
     const prompt = `你是一位资深数学建模竞赛教练。请仔细阅读以下竞赛题目，完成结构化分析。
@@ -3256,11 +3335,21 @@ const gateSkillMap = {
   g6: ['completeness-auditor', 'consistency-auditor', 'quality-assurance-auditor']
 };
 
-function getGateSkillContent(gateId) {
+function getGateSkillContent(gateId, taskDescription) {
   const skills = gateSkillMap[gateId] || [];
   if (typeof skillFullContents === 'undefined') return '';
+  
+  // 智能匹配：如果提供了任务描述，补充相关skill
+  let allSkills = [...skills];
+  if (taskDescription && typeof matchSkillsByTask === 'function') {
+    const matched = matchSkillsByTask(taskDescription, 2);
+    matched.forEach(s => {
+      if (!allSkills.includes(s)) allSkills.push(s);
+    });
+  }
+  
   let content = '';
-  skills.forEach(skillName => {
+  allSkills.forEach(skillName => {
     if (skillFullContents[skillName]) {
       content += `\n\n========== SKILL: ${skillName} ==========\n${skillFullContents[skillName]}`;
     }
@@ -3936,10 +4025,97 @@ function switchTab(tab) {
   document.getElementById('tab-notif').classList.toggle('active', tab==='notif');
   document.getElementById('tab-timeline').classList.toggle('active', tab==='timeline');
   document.getElementById('tab-files').classList.toggle('active', tab==='files');
+  document.getElementById('tab-skills').classList.toggle('active', tab==='skills');
   document.getElementById('panel-notif').style.display = tab==='notif' ? 'block' : 'none';
   document.getElementById('panel-timeline').style.display = tab==='timeline' ? 'block' : 'none';
   document.getElementById('panel-files').style.display = tab==='files' ? 'block' : 'none';
+  document.getElementById('panel-skills').style.display = tab==='skills' ? 'block' : 'none';
   if (tab === 'files') renderFilePanel();
+  if (tab === 'skills') renderSkillPanel();
+}
+
+// ===== Skill 库（渐进式披露）=====
+let skillFilterCategory = 'all';
+function renderSkillPanel() {
+  const list = document.getElementById('skill-list');
+  const filters = document.getElementById('skill-category-filters');
+  const search = document.getElementById('skill-search').value.toLowerCase();
+  
+  // 渲染分类筛选
+  const categories = ['all', ...Object.keys(skillIndexByCategory)];
+  filters.innerHTML = categories.map(cat => 
+    `<button onclick="setSkillCategory('${cat}')" style="padding:4px 10px;border-radius:12px;font-size:10px;border:1px solid var(--border);background:${skillFilterCategory===cat?'var(--accent)':'var(--bg-card)'};color:${skillFilterCategory===cat?'#fff':'var(--text-secondary)'};cursor:pointer;">${cat==='all'?'全部':cat}</button>`
+  ).join('');
+  
+  // 过滤skill
+  let filtered = skillIndex;
+  if (skillFilterCategory !== 'all') {
+    filtered = filtered.filter(s => s.category === skillFilterCategory);
+  }
+  if (search) {
+    filtered = filtered.filter(s => 
+      s.name.toLowerCase().includes(search) ||
+      s.description.toLowerCase().includes(search) ||
+      s.triggers.some(t => t.toLowerCase().includes(search))
+    );
+  }
+  
+  document.getElementById('skill-count').textContent = filtered.length + '个';
+  
+  // 渲染列表
+  list.innerHTML = filtered.map(s => `
+    <div style="padding:10px;margin-bottom:6px;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;cursor:pointer;" onclick="showSkillDetail('${s.name}')">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+        <span style="font-family:var(--mono);font-size:11px;font-weight:600;color:var(--text-primary);">${s.name}</span>
+        <span style="font-size:9px;padding:2px 6px;border-radius:4px;background:var(--bg-hover);color:var(--text-muted);">${s.stage}</span>
+      </div>
+      <div style="font-size:11px;color:var(--text-secondary);margin-bottom:4px;">${s.description}</div>
+      <div style="font-size:9px;color:var(--text-muted);">${s.triggers.slice(0,4).join(' · ')}</div>
+    </div>
+  `).join('');
+  
+  if (filtered.length === 0) {
+    list.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:12px;">没有匹配的 skill</div>';
+  }
+}
+
+function setSkillCategory(cat) {
+  skillFilterCategory = cat;
+  renderSkillPanel();
+}
+
+function filterSkills() {
+  renderSkillPanel();
+}
+
+function showSkillDetail(name) {
+  const content = getSkillContent(name);
+  if (content) {
+    // 显示skill完整内容（用alert或modal）
+    const preview = content.substring(0, 500) + (content.length > 500 ? '\n\n...（内容较长，已截断）' : '');
+    alert(`Skill: ${name}\n\n${preview}`);
+  } else {
+    alert(`Skill: ${name}\n\n完整内容加载中，请稍候再试。`);
+  }
+}
+
+function matchSkillsFromInput() {
+  const task = document.getElementById('skill-match-input').value;
+  const result = document.getElementById('skill-match-result');
+  if (!task.trim()) {
+    result.innerHTML = '<div style="font-size:11px;color:var(--text-muted);">请输入任务描述</div>';
+    return;
+  }
+  const matched = matchSkillsByTask(task, 5);
+  if (matched.length === 0) {
+    result.innerHTML = '<div style="font-size:11px;color:var(--text-muted);">没有匹配到相关 skill，尝试更具体的描述</div>';
+    return;
+  }
+  result.innerHTML = '<div style="font-size:11px;color:var(--text-secondary);margin-bottom:6px;">推荐 skill：</div>' + 
+    matched.map(name => {
+      const s = skillIndex.find(x => x.name === name);
+      return `<div style="padding:6px 8px;background:var(--bg-card);border:1px solid var(--border);border-radius:6px;margin-bottom:4px;font-size:11px;"><span style="font-family:var(--mono);color:var(--accent);">${name}</span> <span style="color:var(--text-muted);">— ${s ? s.description.substring(0,40) : ''}</span></div>`;
+    }).join('');
 }
 
 function addTimelineEvent(type, title, desc, gate, verdict) {
