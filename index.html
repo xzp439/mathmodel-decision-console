@@ -1740,7 +1740,7 @@ async function renderFilePanel() {
           <div class="file-meta">${formatFileSize(f.size)} · ${dateStr}</div>
         </div>
         <div class="file-actions">
-          ${(f.type === 'application/pdf' || f.name.endsWith('.pdf')) ? `<button class="file-action-btn" title="提取文本" onclick="extractPdfText(${f.id})">📝</button>` : ''}
+          ${(f.type === 'application/pdf' || f.name.endsWith('.pdf') || f.name.endsWith('.docx') || f.name.endsWith('.doc') || f.type.startsWith('text/')) ? `<button class="file-action-btn" title="提取文本" onclick="extractFileText(${f.id})">📝</button>` : ''}
           <button class="file-action-btn" title="预览" onclick="previewFile(${f.id})">👁</button>
           <button class="file-action-btn" title="下载" onclick="downloadFile(${f.id})">⬇</button>
           <button class="file-action-btn file-delete" title="删除" onclick="removeFile(${f.id})">✕</button>
@@ -1897,6 +1897,23 @@ async function extractPdfText(fileId) {
   } catch (err) {
     console.error('PDF extraction error:', err);
     showToast('warning', '解析失败：该PDF可能是扫描件（图片格式），无法提取文字');
+  }
+}
+
+// ===== Universal File Text Extraction (PDF + DOCX + TXT) =====
+async function extractFileText(fileId) {
+  const f = await getFile(fileId);
+  if (!f) return;
+  
+  showToast('info', `正在解析「${f.name}」...`);
+  
+  try {
+    const result = await extractTextFromFile(f);
+    showExtractedText(f.name, result.text, result.pages || 1);
+    showToast('success', `解析完成，共 ${result.pages || 1} 页，${result.text.length} 字`);
+  } catch (err) {
+    console.error('File extraction error:', err);
+    showToast('warning', `解析失败：${err.message}`);
   }
 }
 
@@ -2781,29 +2798,22 @@ async function executeGateAI(gateId) {
   let context = '';
   
   if (gateId === 'g1') {
-    // For G1, extract problem text from files
+    // For G1, extract problem text from files (supports PDF/DOCX/TXT)
     const files = await getAllFiles();
-    const problemFiles = files.filter(f => f.category === 'problem' && (f.type === 'application/pdf' || f.name.endsWith('.pdf')));
+    const problemFiles = files.filter(isProblemFile);
     
     if (problemFiles.length === 0) {
-      showToast('warning', '请先在文件库上传比赛题目PDF');
+      showToast('warning', '请先在文件库上传比赛题目文件（支持 PDF/DOCX/TXT）');
       return;
     }
     
     showToast('info', '正在提取题目文本...');
     
-    // Extract text from all problem files
+    // Extract text from all problem files using universal extractor
     for (const f of problemFiles) {
       try {
-        const arrayBuffer = await f.blob.arrayBuffer();
-        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-        let fileText = `\n\n========== 文件：${f.name} ==========\n`;
-        for (let i = 1; i <= pdf.numPages; i++) {
-          const page = await pdf.getPage(i);
-          const textContent = await page.getTextContent();
-          fileText += textContent.items.map(item => item.str).join(' ');
-        }
-        context += fileText;
+        const result = await extractTextFromFile(f);
+        context += `\n\n========== 文件：${f.name} ==========\n${result.text}`;
       } catch (err) {
         console.error('Error extracting', f.name, err);
       }
@@ -2921,21 +2931,25 @@ async function executeAllGates() {
     return;
   }
   
-  // Check settings
-  if (!aiSettings.apiKey) {
+  // Check settings - skip API Key validation for local providers (Ollama/LM Studio)
+  const isLocalProvider = aiSettings.defaultProvider === 'ollama' || aiSettings.defaultProvider === 'lmstudio' || 
+                          (aiSettings.baseUrl && (aiSettings.baseUrl.includes('localhost') || aiSettings.baseUrl.includes('127.0.0.1')));
+  
+  if (!isLocalProvider && !aiSettings.apiKey) {
     loadAiSettings();
-    if (!aiSettings.apiKey) {
+    const stillLocal = aiSettings.defaultProvider === 'ollama' || aiSettings.defaultProvider === 'lmstudio';
+    if (!stillLocal && !aiSettings.apiKey) {
       showToast('warning', '请先在顶部栏「⚙️ AI」中配置API Key');
       openAiSettings();
       return;
     }
   }
   
-  // Check problem files for G1
+  // Check problem files for G1 (supports PDF/DOCX/TXT)
   const files = await getAllFiles();
-  const problemFiles = files.filter(f => f.category === 'problem' && (f.type === 'application/pdf' || f.name.endsWith('.pdf')));
+  const problemFiles = files.filter(isProblemFile);
   if (problemFiles.length === 0) {
-    showToast('warning', '请先在文件库上传比赛题目PDF');
+    showToast('warning', '请先在文件库上传比赛题目文件（支持 PDF/DOCX/TXT）');
     return;
   }
   
@@ -3131,18 +3145,11 @@ async function executeGateMultiAgent(gateId, onProgress) {
   let context = '';
   if (gateId === 'g1') {
     const files = await getAllFiles();
-    const problemFiles = files.filter(f => f.category === 'problem' && (f.type === 'application/pdf' || f.name.endsWith('.pdf')));
+    const problemFiles = files.filter(isProblemFile);
     for (const f of problemFiles) {
       try {
-        const arrayBuffer = await f.blob.arrayBuffer();
-        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-        let fileText = `\n\n========== 文件：${f.name} ==========\n`;
-        for (let i = 1; i <= pdf.numPages; i++) {
-          const page = await pdf.getPage(i);
-          const textContent = await page.getTextContent();
-          fileText += textContent.items.map(item => item.str).join(' ');
-        }
-        context += fileText;
+        const result = await extractTextFromFile(f);
+        context += `\n\n========== 文件：${f.name} ==========\n${result.text}`;
       } catch (err) { console.error('Error extracting', f.name, err); }
     }
   } else {
