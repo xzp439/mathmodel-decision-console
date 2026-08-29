@@ -33,6 +33,31 @@
   --purple-dim: rgba(168,85,247,0.12);
   --mono: 'JetBrains Mono', 'Consolas', monospace;
   --sans: 'Noto Sans SC', -apple-system, sans-serif;
+  --glow-color: rgba(245,158,11,0.08);
+}
+
+/* Light theme */
+[data-theme="light"] {
+  --bg-deep: #f1f5f9;
+  --bg-panel: #ffffff;
+  --bg-card: #f8fafc;
+  --bg-hover: #e2e8f0;
+  --border: #e2e8f0;
+  --border-light: #cbd5e1;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --accent: #d97706;
+  --accent-dim: rgba(217,119,6,0.1);
+  --green: #16a34a;
+  --green-dim: rgba(22,163,74,0.1);
+  --red: #dc2626;
+  --red-dim: rgba(220,38,38,0.1);
+  --blue: #2563eb;
+  --blue-dim: rgba(37,99,235,0.1);
+  --purple: #9333ea;
+  --purple-dim: rgba(147,51,234,0.1);
+  --glow-color: rgba(217,119,6,0.06);
 }
 * { margin:0; padding:0; box-sizing:border-box; }
 html, body { height:100%; background:var(--bg-deep); color:var(--text-primary); font-family:var(--sans); font-size:14px; overflow:hidden; }
@@ -52,6 +77,87 @@ body { min-width:1280px; }
 .topbar-btn { padding:6px 12px; font-size:12px; background:var(--bg-card); border:1px solid var(--border); color:var(--text-secondary); border-radius:6px; cursor:pointer; font-family:var(--sans); transition:all 0.15s; }
 .topbar-btn:hover { border-color:var(--accent); color:var(--accent); background:var(--accent-dim); }
 .topbar-btn-danger:hover { border-color:var(--red); color:var(--red); background:var(--red-dim); }
+
+/* Cursor glow */
+.cursor-glow {
+  position: fixed;
+  width: 400px;
+  height: 400px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--glow-color) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+  transform: translate(-50%, -50%);
+  transition: opacity 0.3s;
+}
+
+/* Command palette */
+.cmd-palette-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 2000;
+  display: none;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 15vh;
+  backdrop-filter: blur(4px);
+}
+.cmd-palette-overlay.show { display: flex; }
+.cmd-palette {
+  width: 90%;
+  max-width: 560px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.4);
+  overflow: hidden;
+  animation: cmdSlideIn 0.15s ease;
+}
+@keyframes cmdSlideIn { from{opacity:0;transform:translateY(-8px);} to{opacity:1;transform:translateY(0);} }
+.cmd-input {
+  width: 100%;
+  padding: 16px 20px;
+  background: var(--bg-card);
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
+  font-size: 15px;
+  font-family: var(--sans);
+  outline: none;
+}
+.cmd-list { max-height: 320px; overflow-y: auto; padding: 8px; }
+.cmd-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-secondary);
+  transition: all 0.1s;
+}
+.cmd-item:hover, .cmd-item.active { background: var(--bg-hover); color: var(--text-primary); }
+.cmd-item .cmd-icon { width: 28px; height: 28px; border-radius: 6px; background: var(--bg-card); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+.cmd-item .cmd-label { flex: 1; }
+.cmd-item .cmd-shortcut { font-family: var(--mono); font-size: 10px; color: var(--text-muted); background: var(--bg-card); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border); }
+.cmd-section { padding: 8px 12px 4px; font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--text-muted); }
+
+/* Card hover animations */
+.gate-node, .stat-box, .info-card, .candidate-item, .subcheck-item, .gc-item, .notif-item {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.gate-node:hover { transform: translateY(-2px); }
+.stat-box:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+.info-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+
+/* Progress ring */
+.progress-ring-container { display: flex; align-items: center; justify-content: center; position: relative; }
+.progress-ring-container svg { transform: rotate(-90deg); }
+.progress-ring-bg { fill: none; stroke: var(--border); stroke-width: 6; }
+.progress-ring-fill { fill: none; stroke: var(--accent); stroke-width: 6; stroke-linecap: round; transition: stroke-dashoffset 0.5s ease; }
+.progress-ring-text { position: absolute; font-family: var(--mono); font-size: 14px; font-weight: 700; color: var(--text-primary); }
 
 .sidebar { background:var(--bg-panel); border-right:1px solid var(--border); overflow-y:auto; padding:16px 0; }
 .sidebar .section-title { padding:8px 20px; font-size:11px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-muted); }
@@ -314,6 +420,8 @@ body { min-width:1280px; }
     </div>
     <div class="spacer"></div>
     <div style="display:flex;gap:8px;">
+      <button class="topbar-btn" onclick="toggleTheme()" title="切换主题（浅色/深色/系统）" id="theme-btn">◐ 主题</button>
+      <button class="topbar-btn" onclick="openCommandPalette()" title="命令面板 (Ctrl+K)">⌘ 命令</button>
       <button class="topbar-btn" onclick="exportData()" title="导出JSON备份">⤓ 导出</button>
       <button class="topbar-btn" onclick="importData()" title="导入JSON备份">⤒ 导入</button>
       <button class="topbar-btn topbar-btn-danger" onclick="resetAll()" title="清空所有数据">↺ 重置</button>
@@ -372,6 +480,20 @@ body { min-width:1280px; }
 
     <div class="stats-section">
       <div class="stats-title">检测统计 (共56项)</div>
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:12px;padding:12px;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;">
+        <div class="progress-ring-container" style="width:64px;height:64px;flex-shrink:0;">
+          <svg width="64" height="64" viewBox="0 0 64 64">
+            <circle class="progress-ring-bg" cx="32" cy="32" r="26"></circle>
+            <circle class="progress-ring-fill" id="overall-ring" cx="32" cy="32" r="26" stroke-dasharray="163.36" stroke-dashoffset="163.36"></circle>
+          </svg>
+          <div class="progress-ring-text" id="overall-pct">0%</div>
+        </div>
+        <div style="flex:1;">
+          <div style="font-size:12px;color:var(--text-secondary);margin-bottom:4px;">整体完成度</div>
+          <div style="font-family:var(--mono);font-size:18px;font-weight:700;color:var(--text-primary);" id="overall-count">0/56</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:2px;" id="overall-desc">尚未开始检测</div>
+        </div>
+      </div>
       <div class="stats-grid" style="grid-template-columns:1fr 1fr 1fr;">
         <div class="stat-box"><div class="stat-num green" id="stat-gate">0/8</div><div class="stat-label">Gate</div></div>
         <div class="stat-box"><div class="stat-num blue" id="stat-sub">0/38</div><div class="stat-label">子检测</div></div>
@@ -409,6 +531,16 @@ body { min-width:1280px; }
       </div>
       <div class="gc-list" id="gc-list"></div>
     </div>
+  </div>
+</div>
+
+<div class="cursor-glow" id="cursor-glow"></div>
+
+<!-- Command Palette -->
+<div class="cmd-palette-overlay" id="cmd-overlay" onclick="if(event.target===this)closeCommandPalette()">
+  <div class="cmd-palette">
+    <input type="text" class="cmd-input" id="cmd-input" placeholder="输入命令或搜索Gate..." oninput="filterCommands()" onkeydown="handleCmdKey(event)">
+    <div class="cmd-list" id="cmd-list"></div>
   </div>
 </div>
 
@@ -683,7 +815,128 @@ function resetAll() {
   location.reload();
 }
 
+// ===== Theme & Visual Enhancements =====
+let currentTheme = localStorage.getItem('theme') || 'dark';
+
+function applyTheme(theme) {
+  currentTheme = theme;
+  if (theme === 'system') {
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
+  } else {
+    document.documentElement.setAttribute('data-theme', theme);
+  }
+  localStorage.setItem('theme', theme);
+  const btn = document.getElementById('theme-btn');
+  if (btn) btn.textContent = theme === 'dark' ? '◑ 深色' : theme === 'light' ? '◐ 浅色' : '◒ 系统';
+  saveState();
+}
+
+function toggleTheme() {
+  const themes = ['dark', 'light', 'system'];
+  const idx = themes.indexOf(currentTheme);
+  applyTheme(themes[(idx + 1) % themes.length]);
+  showToast('info', `主题：${currentTheme === 'dark' ? '深色' : currentTheme === 'light' ? '浅色' : '跟随系统'}`);
+}
+
+// Cursor glow
+document.addEventListener('mousemove', (e) => {
+  const glow = document.getElementById('cursor-glow');
+  if (glow) {
+    glow.style.left = e.clientX + 'px';
+    glow.style.top = e.clientY + 'px';
+  }
+});
+
+// ===== Command Palette =====
+const commands = [
+  { icon: '⌂', label: '跳转到 G1 问题解析', action: () => selectGate('g1'), shortcut: '1', section: 'Gate导航' },
+  { icon: '⚗', label: '跳转到 G2 方法验证', action: () => selectGate('g2'), shortcut: '2', section: 'Gate导航' },
+  { icon: '◆', label: '跳转到 G2.5 方法选择', action: () => selectGate('g25'), shortcut: '3', section: 'Gate导航' },
+  { icon: '⌘', label: '跳转到 G3 代码审查', action: () => selectGate('g3'), shortcut: '4', section: 'Gate导航' },
+  { icon: '⚖', label: '跳转到 G4.5 结果判决', action: () => selectGate('g45'), shortcut: '5', section: 'Gate导航' },
+  { icon: '❄', label: '跳转到 G4 结果冻结', action: () => selectGate('g4'), shortcut: '6', section: 'Gate导航' },
+  { icon: '✎', label: '跳转到 G5 论文质量', action: () => selectGate('g5'), shortcut: '7', section: 'Gate导航' },
+  { icon: '✓', label: '跳转到 G6 最终审计', action: () => selectGate('g6'), shortcut: '8', section: 'Gate导航' },
+  { icon: '⤓', label: '导出数据备份', action: exportData, shortcut: 'Ctrl+E', section: '数据操作' },
+  { icon: '⤒', label: '导入数据备份', action: importData, shortcut: 'Ctrl+I', section: '数据操作' },
+  { icon: '↺', label: '重置所有数据', action: resetAll, shortcut: '', section: '数据操作' },
+  { icon: '◐', label: '切换主题（深色/浅色/系统）', action: toggleTheme, shortcut: 'Ctrl+T', section: '外观' },
+  { icon: '?', label: '显示键盘快捷键帮助', action: () => { const h=document.getElementById('kbd-hint'); h.classList.add('show'); setTimeout(()=>h.classList.remove('show'),8000); }, shortcut: '?', section: '帮助' },
+  { icon: '▤', label: '切换到通知面板', action: () => switchTab('notif'), shortcut: 'N', section: '面板切换' },
+  { icon: '⏱', label: '切换到审计时间线', action: () => switchTab('timeline'), shortcut: 'T', section: '面板切换' },
+];
+
+let cmdActiveIndex = 0;
+let filteredCommands = [...commands];
+
+function openCommandPalette() {
+  const overlay = document.getElementById('cmd-overlay');
+  const input = document.getElementById('cmd-input');
+  overlay.classList.add('show');
+  input.value = '';
+  filteredCommands = [...commands];
+  cmdActiveIndex = 0;
+  renderCommands();
+  setTimeout(() => input.focus(), 50);
+}
+
+function closeCommandPalette() {
+  document.getElementById('cmd-overlay').classList.remove('show');
+}
+
+function filterCommands() {
+  const q = document.getElementById('cmd-input').value.toLowerCase();
+  filteredCommands = commands.filter(c => c.label.toLowerCase().includes(q) || c.section.toLowerCase().includes(q));
+  cmdActiveIndex = 0;
+  renderCommands();
+}
+
+function renderCommands() {
+  const list = document.getElementById('cmd-list');
+  if (filteredCommands.length === 0) {
+    list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px;">未找到匹配的命令</div>';
+    return;
+  }
+  let html = '';
+  let lastSection = '';
+  filteredCommands.forEach((c, i) => {
+    if (c.section !== lastSection) {
+      html += `<div class="cmd-section">${c.section}</div>`;
+      lastSection = c.section;
+    }
+    html += `<div class="cmd-item ${i===cmdActiveIndex?'active':''}" onclick="executeCommand(${i})" onmouseenter="cmdActiveIndex=${i};renderCommands()">
+      <div class="cmd-icon">${c.icon}</div>
+      <div class="cmd-label">${c.label}</div>
+      ${c.shortcut ? `<div class="cmd-shortcut">${c.shortcut}</div>` : ''}
+    </div>`;
+  });
+  list.innerHTML = html;
+}
+
+function executeCommand(index) {
+  const c = filteredCommands[index];
+  if (c) {
+    closeCommandPalette();
+    setTimeout(() => c.action(), 50);
+  }
+}
+
+function handleCmdKey(e) {
+  if (e.key === 'Escape') { closeCommandPalette(); e.preventDefault(); }
+  else if (e.key === 'ArrowDown') { cmdActiveIndex = Math.min(cmdActiveIndex + 1, filteredCommands.length - 1); renderCommands(); e.preventDefault(); }
+  else if (e.key === 'ArrowUp') { cmdActiveIndex = Math.max(cmdActiveIndex - 1, 0); renderCommands(); e.preventDefault(); }
+  else if (e.key === 'Enter') { executeCommand(cmdActiveIndex); e.preventDefault(); }
+}
+
+// Global keyboard shortcuts for command palette
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); openCommandPalette(); }
+  if ((e.ctrlKey || e.metaKey) && e.key === 't') { e.preventDefault(); toggleTheme(); }
+});
+
 function init() {
+  applyTheme(currentTheme);
   const loaded = loadState();
   renderSidebar();
   renderPipeline();
@@ -1077,6 +1330,23 @@ function updateStats() {
   if (el('stat-accept')) el('stat-accept').textContent = accept;
   if (el('stat-edit')) el('stat-edit').textContent = edit;
   if (el('stat-reject')) el('stat-reject').textContent = reject;
+
+  // Overall progress ring
+  const totalPass = gatePass + subPass + globalPass;
+  const totalAll = 8 + subTotal + 10;
+  const pct = Math.round((totalPass / totalAll) * 100);
+  const circumference = 2 * Math.PI * 26;
+  if (el('overall-ring')) el('overall-ring').style.strokeDashoffset = circumference * (1 - pct / 100);
+  if (el('overall-pct')) el('overall-pct').textContent = pct + '%';
+  if (el('overall-count')) el('overall-count').textContent = `${totalPass}/${totalAll}`;
+  if (el('overall-desc')) {
+    if (pct === 0) el('overall-desc').textContent = '尚未开始检测';
+    else if (pct < 25) el('overall-desc').textContent = '刚起步，继续加油';
+    else if (pct < 50) el('overall-desc').textContent = '进展顺利，保持节奏';
+    else if (pct < 75) el('overall-desc').textContent = '已过半，胜利在望';
+    else if (pct < 100) el('overall-desc').textContent = '即将完成，最后冲刺';
+    else el('overall-desc').textContent = '全部检测完成！';
+  }
 }
 
 // ===== Toast =====
