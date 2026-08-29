@@ -78,19 +78,6 @@ body { min-width:1280px; }
 .topbar-btn:hover { border-color:var(--accent); color:var(--accent); background:var(--accent-dim); }
 .topbar-btn-danger:hover { border-color:var(--red); color:var(--red); background:var(--red-dim); }
 
-/* Cursor glow */
-.cursor-glow {
-  position: fixed;
-  width: 400px;
-  height: 400px;
-  border-radius: 50%;
-  background: radial-gradient(circle, var(--glow-color) 0%, transparent 70%);
-  pointer-events: none;
-  z-index: 0;
-  transform: translate(-50%, -50%);
-  transition: opacity 0.3s;
-}
-
 /* Command palette */
 .cmd-palette-overlay {
   position: fixed;
@@ -534,8 +521,6 @@ body { min-width:1280px; }
   </div>
 </div>
 
-<div class="cursor-glow" id="cursor-glow"></div>
-
 <!-- Command Palette -->
 <div class="cmd-palette-overlay" id="cmd-overlay" onclick="if(event.target===this)closeCommandPalette()">
   <div class="cmd-palette">
@@ -838,15 +823,6 @@ function toggleTheme() {
   applyTheme(themes[(idx + 1) % themes.length]);
   showToast('info', `主题：${currentTheme === 'dark' ? '深色' : currentTheme === 'light' ? '浅色' : '跟随系统'}`);
 }
-
-// Cursor glow
-document.addEventListener('mousemove', (e) => {
-  const glow = document.getElementById('cursor-glow');
-  if (glow) {
-    glow.style.left = e.clientX + 'px';
-    glow.style.top = e.clientY + 'px';
-  }
-});
 
 // ===== Command Palette =====
 const commands = [
