@@ -83,6 +83,136 @@ body { min-width:1280px; }
 .topbar-btn { padding:6px 12px; font-size:12px; background:var(--bg-card); border:1px solid var(--border); color:var(--text-secondary); border-radius:6px; cursor:pointer; font-family:var(--sans); transition:all 0.15s; }
 .topbar-btn:hover { border-color:var(--accent); color:var(--accent); background:var(--accent-dim); }
 .topbar-btn-danger:hover { border-color:var(--red); color:var(--red); background:var(--red-dim); }
+.topbar-btn-primary {
+  background: linear-gradient(135deg, var(--accent), #fbbf24);
+  color: #000;
+  border-color: var(--accent);
+  font-weight: 700;
+}
+.topbar-btn-primary:hover {
+  opacity: 0.9;
+  box-shadow: 0 2px 8px rgba(245,158,11,0.3);
+}
+.topbar-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Execution Progress */
+.exec-progress-modal {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.7);
+  z-index: 4500;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(4px);
+}
+.exec-progress-modal.show { display: flex; }
+.exec-progress-content {
+  width: 90%;
+  max-width: 520px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.exec-progress-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-card);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.exec-progress-title {
+  font-size: 15px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.exec-progress-body {
+  padding: 20px;
+}
+.exec-progress-bar-wrap {
+  margin-bottom: 16px;
+}
+.exec-progress-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+.exec-progress-bar {
+  height: 8px;
+  background: var(--bg-deep);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.exec-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), #fbbf24);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+.exec-gate-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+.exec-gate-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 12px;
+}
+.exec-gate-item.executing {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+.exec-gate-item.done {
+  border-color: var(--green);
+  opacity: 0.8;
+}
+.exec-gate-item.failed {
+  border-color: var(--red);
+}
+.exec-gate-status {
+  width: 20px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.exec-gate-name {
+  flex: 1;
+  font-weight: 500;
+}
+.exec-gate-time {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-muted);
+}
+.exec-progress-footer {
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-card);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.exec-progress-stats {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--mono);
+}
 
 /* Command palette */
 .cmd-palette-overlay {
@@ -900,6 +1030,7 @@ body { min-width:1280px; }
     </div>
     <div class="spacer"></div>
     <div style="display:flex;gap:8px;">
+      <button class="topbar-btn topbar-btn-primary" onclick="executeAllGates()" title="按顺序自动执行全部8个Gate">🚀 一键执行全部</button>
       <button class="topbar-btn" onclick="openAiSettings()" title="AI分析设置">⚙️ AI</button>
       <button class="topbar-btn" onclick="toggleTheme()" title="切换主题（浅色/深色/系统）" id="theme-btn">◐ 主题</button>
       <button class="topbar-btn" onclick="openCommandPalette()" title="命令面板 (Ctrl+K)">⌘ 命令</button>
@@ -1075,6 +1206,32 @@ body { min-width:1280px; }
     <div class="ai-modal-footer" id="ai-result-footer" style="display:none;">
       <button class="ai-btn" onclick="copyAiResult()">📋 复制结果</button>
       <button class="ai-btn primary" onclick="applyAiToG1()">✅ 应用到G1面板</button>
+    </div>
+  </div>
+</div>
+
+<!-- Execution Progress Modal -->
+<div class="exec-progress-modal" id="exec-progress-modal">
+  <div class="exec-progress-content">
+    <div class="exec-progress-header">
+      <div class="exec-progress-title">🚀 全流程自动执行</div>
+      <button style="background:none;border:none;color:var(--text-secondary);font-size:18px;cursor:pointer;" onclick="closeExecProgress()">✕</button>
+    </div>
+    <div class="exec-progress-body">
+      <div class="exec-progress-bar-wrap">
+        <div class="exec-progress-label">
+          <span id="exec-current-gate">准备中...</span>
+          <span id="exec-progress-pct">0/8</span>
+        </div>
+        <div class="exec-progress-bar">
+          <div class="exec-progress-fill" id="exec-progress-fill" style="width:0%"></div>
+        </div>
+      </div>
+      <div class="exec-gate-list" id="exec-gate-list"></div>
+    </div>
+    <div class="exec-progress-footer">
+      <div class="exec-progress-stats" id="exec-progress-stats">预计总耗时：约 3-5 分钟</div>
+      <button class="ai-btn" id="exec-cancel-btn" onclick="cancelExecAll()">取消执行</button>
     </div>
   </div>
 </div>
@@ -2474,6 +2631,237 @@ function copyGateResult(gateId) {
     ta.remove();
     showToast('success', 'AI结果已复制');
   });
+}
+
+// ===== Execute All Gates (One-Click Full Pipeline) =====
+let execAllRunning = false;
+let execAllCancel = false;
+let execAllStartTime = 0;
+
+async function executeAllGates() {
+  if (execAllRunning) {
+    showToast('warning', '已有全流程任务正在执行');
+    return;
+  }
+  
+  // Check settings
+  if (!aiSettings.apiKey) {
+    loadAiSettings();
+    if (!aiSettings.apiKey) {
+      showToast('warning', '请先在顶部栏「⚙️ AI」中配置API Key');
+      openAiSettings();
+      return;
+    }
+  }
+  
+  // Check problem files for G1
+  const files = await getAllFiles();
+  const problemFiles = files.filter(f => f.category === 'problem' && (f.type === 'application/pdf' || f.name.endsWith('.pdf')));
+  if (problemFiles.length === 0) {
+    showToast('warning', '请先在文件库上传比赛题目PDF');
+    return;
+  }
+  
+  // Confirm
+  if (!confirm('将按顺序自动执行全部8个Gate，预计耗时3-5分钟。执行过程中请勿关闭页面。确定开始吗？')) return;
+  
+  execAllRunning = true;
+  execAllCancel = false;
+  execAllStartTime = Date.now();
+  
+  // Show progress modal
+  document.getElementById('exec-progress-modal').classList.add('show');
+  document.getElementById('exec-cancel-btn').disabled = false;
+  document.getElementById('exec-cancel-btn').textContent = '取消执行';
+  
+  // Disable topbar button
+  const topbarBtn = document.querySelector('.topbar-btn-primary');
+  if (topbarBtn) topbarBtn.disabled = true;
+  
+  // Initialize gate list
+  const gateListEl = document.getElementById('exec-gate-list');
+  gateListEl.innerHTML = '';
+  gateOrder.forEach(id => {
+    const g = gates[id];
+    const item = document.createElement('div');
+    item.className = 'exec-gate-item';
+    item.id = `exec-item-${id}`;
+    item.innerHTML = `
+      <div class="exec-gate-status" id="exec-status-${id}">○</div>
+      <div class="exec-gate-name">${g.label} · ${g.name}</div>
+      <div class="exec-gate-time" id="exec-time-${id}">等待中</div>
+    `;
+    gateListEl.appendChild(item);
+  });
+  
+  let completed = 0;
+  let failed = 0;
+  const results = {};
+  
+  for (let i = 0; i < gateOrder.length; i++) {
+    if (execAllCancel) break;
+    
+    const gateId = gateOrder[i];
+    const g = gates[gateId];
+    
+    // Update UI
+    document.getElementById(`exec-item-${gateId}`).classList.add('executing');
+    document.getElementById(`exec-status-${gateId}`).textContent = '⟳';
+    document.getElementById(`exec-time-${gateId}`).textContent = '执行中...';
+    document.getElementById('exec-current-gate').textContent = `正在执行：${g.label} ${g.name}`;
+    document.getElementById('exec-progress-pct').textContent = `${completed + failed}/${gateOrder.length}`;
+    document.getElementById('exec-progress-fill').style.width = `${((completed + failed) / gateOrder.length) * 100}%`;
+    
+    const gateStartTime = Date.now();
+    
+    try {
+      // Execute gate AI (reuse the existing function but without UI updates)
+      await executeGateAISilent(gateId);
+      
+      const duration = Math.round((Date.now() - gateStartTime) / 1000);
+      results[gateId] = { success: true, duration };
+      completed++;
+      
+      // Update UI
+      document.getElementById(`exec-item-${gateId}`).classList.remove('executing');
+      document.getElementById(`exec-item-${gateId}`).classList.add('done');
+      document.getElementById(`exec-status-${gateId}`).textContent = '✓';
+      document.getElementById(`exec-time-${gateId}`).textContent = `${duration}s`;
+      
+    } catch (err) {
+      const duration = Math.round((Date.now() - gateStartTime) / 1000);
+      results[gateId] = { success: false, error: err.message, duration };
+      failed++;
+      
+      // Update UI
+      document.getElementById(`exec-item-${gateId}`).classList.remove('executing');
+      document.getElementById(`exec-item-${gateId}`).classList.add('failed');
+      document.getElementById(`exec-status-${gateId}`).textContent = '✕';
+      document.getElementById(`exec-time-${gateId}`).textContent = `失败 ${duration}s`;
+      
+      // Log error but continue
+      console.error(`Gate ${gateId} failed:`, err);
+    }
+    
+    // Small delay between gates
+    if (i < gateOrder.length - 1 && !execAllCancel) {
+      await new Promise(r => setTimeout(r, 500));
+    }
+  }
+  
+  // Final update
+  const totalDuration = Math.round((Date.now() - execAllStartTime) / 1000);
+  document.getElementById('exec-progress-fill').style.width = '100%';
+  document.getElementById('exec-progress-pct').textContent = `${completed + failed}/${gateOrder.length}`;
+  document.getElementById('exec-current-gate').textContent = execAllCancel ? '已取消' : '执行完成';
+  document.getElementById('exec-progress-stats').textContent = `完成 ${completed}/8，失败 ${failed}，总耗时 ${totalDuration}s`;
+  document.getElementById('exec-cancel-btn').textContent = '关闭';
+  document.getElementById('exec-cancel-btn').onclick = closeExecProgress;
+  
+  // Re-enable topbar button
+  if (topbarBtn) topbarBtn.disabled = false;
+  
+  execAllRunning = false;
+  
+  // Show result
+  if (failed === 0 && !execAllCancel) {
+    showToast('success', `全流程执行完成！8个Gate全部成功，总耗时${totalDuration}s`);
+  } else if (execAllCancel) {
+    showToast('info', `执行已取消，完成${completed}个，失败${failed}个`);
+  } else {
+    showToast('warning', `执行完成：成功${completed}个，失败${failed}个，总耗时${totalDuration}s。失败的Gate可单独重试`);
+  }
+  
+  // Refresh UI
+  renderDetail();
+  renderPipeline();
+  updateStats();
+}
+
+// Silent version of executeGateAI for batch execution (no toast, no renderDetail)
+async function executeGateAISilent(gateId) {
+  const g = gates[gateId];
+  const template = gatePromptTemplates[gateId];
+  
+  if (!template) throw new Error(`Gate ${gateId} 无对应prompt模板`);
+  
+  // Build context
+  let context = '';
+  
+  if (gateId === 'g1') {
+    const files = await getAllFiles();
+    const problemFiles = files.filter(f => f.category === 'problem' && (f.type === 'application/pdf' || f.name.endsWith('.pdf')));
+    
+    for (const f of problemFiles) {
+      try {
+        const arrayBuffer = await f.blob.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        let fileText = `\n\n========== 文件：${f.name} ==========\n`;
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const textContent = await page.getTextContent();
+          fileText += textContent.items.map(item => item.str).join(' ');
+        }
+        context += fileText;
+      } catch (err) {
+        console.error('Error extracting', f.name, err);
+      }
+    }
+  } else {
+    const prevResults = [];
+    for (const id of gateOrder) {
+      if (state[id] && state[id].aiResult) {
+        prevResults.push(`### ${gates[id].label} ${gates[id].name} 结果\n${state[id].aiResult.slice(0, 2000)}`);
+      }
+      if (id === gateId) break;
+    }
+    context = prevResults.length > 0 ? prevResults.join('\n\n') : '（暂无前置Gate结果）';
+  }
+  
+  const prompt = template(context);
+  
+  const response = await fetch(`${aiSettings.baseUrl}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${aiSettings.apiKey}`
+    },
+    body: JSON.stringify({
+      model: aiSettings.model,
+      messages: [
+        { role: 'system', content: '你是一位资深数学建模竞赛教练和质量审计专家。输出要求结构化、条理清晰、可操作性强，所有结论必须有具体数字或证据支撑。' },
+        { role: 'user', content: prompt }
+      ],
+      temperature: 0.7,
+      max_tokens: 6000
+    })
+  });
+  
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`API错误 ${response.status}：${err.slice(0, 200)}`);
+  }
+  
+  const data = await response.json();
+  const result = data.choices[0].message.content;
+  
+  // Save result
+  state[gateId].aiResult = result;
+  state[gateId].aiGeneratedAt = Date.now();
+  saveState();
+  
+  return result;
+}
+
+function cancelExecAll() {
+  if (execAllRunning) {
+    execAllCancel = true;
+    showToast('info', '正在取消...当前Gate执行完成后停止');
+  }
+}
+
+function closeExecProgress() {
+  document.getElementById('exec-progress-modal').classList.remove('show');
 }
 
 // ===== Theme & Visual Enhancements =====
