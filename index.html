@@ -1236,6 +1236,7 @@ body { min-width:1280px; }
     </div>
     <div class="ai-modal-footer">
       <button class="ai-btn" onclick="testAiConnection()">🔌 测试连接</button>
+      <button class="ai-btn" onclick="showUsageStats()">📊 运行状态</button>
       <button class="ai-btn primary" onclick="saveAiSettings()">保存设置</button>
     </div>
   </div>
@@ -2102,7 +2103,11 @@ let aiSettings = {
   autoFill: true,
   defaultProvider: 'volcengine',
   providers: [],
-  agentModels: {}
+  agentModels: {
+    problemAnalyst: 'qwen2.5:0.5b',
+    qualityAuditor: 'qwen2.5:3b',
+    critic: 'qwen2.5:3b'
+  }
 };
 let aiAnalysisResult = '';
 
@@ -2471,6 +2476,67 @@ ${allText.slice(0, 12000)}
     </div>`;
   }
 }
+
+// 显示运行状态（token用量 + 故障转移历史）
+function showUsageStats() {
+  const stats = usageTracker.getStats();
+  let html = '<div style="padding:16px;">';
+  html += '<h4 style="margin:0 0 12px 0;">📊 AI 运行状态</h4>';
+  
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;">';
+  html += '<div style="padding:10px;background:var(--bg-deep);border-radius:6px;"><div style="font-size:11px;color:var(--text-muted);">总请求数</div><div style="font-size:18px;font-weight:bold;">' + stats.totalRequests + '</div></div>';
+  html += '<div style="padding:10px;background:var(--bg-deep);border-radius:6px;"><div style="font-size:11px;color:var(--text-muted);">总Token用量</div><div style="font-size:18px;font-weight:bold;">' + (stats.totalTokens > 1000 ? (stats.totalTokens/1000).toFixed(1) + 'K' : stats.totalTokens) + '</div></div>';
+  html += '<div style="padding:10px;background:var(--bg-deep);border-radius:6px;"><div style="font-size:11px;color:var(--text-muted);">故障转移次数</div><div style="font-size:18px;font-weight:bold;color:' + (stats.totalFailovers > 0 ? '#f59e0b' : '#10b981') + ';">' + stats.totalFailovers + '</div></div>';
+  html += '<div style="padding:10px;background:var(--bg-deep);border-radius:6px;"><div style="font-size:11px;color:var(--text-muted);">备用模型</div><div style="font-size:12px;font-weight:bold;">智谱glm-4-flash</div></div>';
+  html += '</div>';
+  
+  // 各模型用量
+  html += '<h5 style="margin:12px 0 8px 0;">各模型用量</h5>';
+  const modelKeys = Object.keys(stats.perModel);
+  if (modelKeys.length === 0) {
+    html += '<div style="font-size:12px;color:var(--text-muted);">暂无调用记录</div>';
+  } else {
+    html += '<div style="max-height:120px;overflow-y:auto;">';
+    modelKeys.forEach(m => {
+      const s = stats.perModel[m];
+      const health = s.requests > 0 ? ((1 - s.failures/s.requests)*100).toFixed(0) : 100;
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-bottom:1px solid var(--border);font-size:11px;">';
+      html += '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + m + '</span>';
+      html += '<span style="margin:0 8px;color:var(--text-muted);">' + s.requests + '次</span>';
+      html += '<span style="color:' + (health >= 80 ? '#10b981' : health >= 50 ? '#f59e0b' : '#ef4444') + ';">' + health + '%健康</span>';
+      html += '</div>';
+    });
+    html += '</div>';
+  }
+  
+  // 故障转移历史
+  html += '<h5 style="margin:12px 0 8px 0;">故障转移历史</h5>';
+  if (stats.failoverHistory.length === 0) {
+    html += '<div style="font-size:12px;color:#10b981;">✅ 无故障转移，主模型稳定</div>';
+  } else {
+    html += '<div style="max-height:100px;overflow-y:auto;">';
+    stats.failoverHistory.forEach(h => {
+      html += '<div style="padding:6px 8px;background:rgba(245,158,11,0.1);border-radius:4px;margin-bottom:4px;font-size:11px;">';
+      html += '<span style="color:var(--text-muted);">' + h.time + '</span> ';
+      html += '<span>' + h.from + ' → ' + h.to + '</span>';
+      html += '</div>';
+    });
+    html += '</div>';
+  }
+  
+  html += '<div style="margin-top:12px;padding:8px;background:rgba(16,185,129,0.1);border-radius:6px;font-size:11px;color:var(--text-muted);">';
+  html += '💡 自动故障转移已启用：主模型失败（429/500/502/503/超时）时自动切换到智谱glm-4-flash（免费）';
+  html += '</div>';
+  
+  html += '</div>';
+  
+  // 显示在结果弹窗里
+  document.getElementById('ai-result-title').textContent = '📊 AI 运行状态';
+  document.getElementById('ai-result-body').innerHTML = html;
+  document.getElementById('ai-result-footer').style.display = 'none';
+  document.getElementById('ai-result-modal').style.display = 'flex';
+}
+
 
 function renderMarkdown(text) {
   // Simple markdown renderer
@@ -3252,98 +3318,120 @@ async function executeGateMultiAgent(gateId, onProgress) {
   return { result: finalResult, conversation };
 }
 
-// Helper: call AI API with optional model override, supports multiple provider types
+// ===== 自动故障转移 + 额度跟踪（借鉴 FreeLLMAPI）=====
+const failoverConfig = {
+  enabled: true,
+  fallbackModels: [
+    { model: 'glm-4-flash', baseUrl: 'https://open.bigmodel.cn/api/paas/v4', apiKey: '42dd582763fa4336b99b7046bc2e09af.jLVZyDk9EsZV9nOu', name: '智谱glm-4-flash(免费)' },
+  ],
+  retryableErrors: [408, 429, 500, 502, 503, 504],
+};
+const usageTracker = {
+  totalTokens: 0, totalRequests: 0, totalFailovers: 0, perModel: {}, failoverHistory: [],
+  track(model, tokens, success, failoverTo) {
+    this.totalRequests++; if (tokens) this.totalTokens += tokens;
+    if (!this.perModel[model]) this.perModel[model] = { requests: 0, tokens: 0, failures: 0 };
+    this.perModel[model].requests++; if (tokens) this.perModel[model].tokens += tokens;
+    if (!success) this.perModel[model].failures++;
+    if (failoverTo) { this.totalFailovers++; this.failoverHistory.unshift({ from: model, to: failoverTo, time: new Date().toLocaleTimeString() }); if (this.failoverHistory.length > 10) this.failoverHistory.pop(); }
+  },
+  getStats() { return { totalRequests: this.totalRequests, totalTokens: this.totalTokens, totalFailovers: this.totalFailovers, failoverHistory: this.failoverHistory.slice(0,5), perModel: this.perModel }; }
+};
+function isRetryableError(error) {
+  if (!error) return false;
+  const m = error.message && error.message.match(/(\d{3})/);
+  if (m && failoverConfig.retryableErrors.includes(parseInt(m[1]))) return true;
+  return /fetch|network|timeout|rate limit|429|503|502|500/i.test(error.message || '');
+}
+
+// Helper: call AI API with auto failover + usage tracking
 async function callAI(messages, modelOverride) {
-  let model = modelOverride || aiSettings.model;
-  let baseUrl = aiSettings.baseUrl.replace(/\/$/, '');
-  let apiKey = aiSettings.apiKey;
-  
-  // Auto-detect local Ollama models (model names with colon like qwen2.5:7b)
-  const isLocalModel = model.includes(':') && !model.includes('/') && !model.includes('gpt') && !model.includes('claude') && !model.includes('gemini');
-  if (isLocalModel) {
-    baseUrl = 'http://localhost:11434/v1';
-    apiKey = 'ollama';
+  const originalModel = modelOverride || aiSettings.model;
+  let currentModel = originalModel, currentBaseUrl = aiSettings.baseUrl.replace(/\/$/, ''), currentApiKey = aiSettings.apiKey, lastError = null;
+  for (let attempt = 0; attempt <= failoverConfig.fallbackModels.length; attempt++) {
+    try {
+      const result = await callAIWithModel(messages, currentModel, currentBaseUrl, currentApiKey);
+      const tokens = result.usage && result.usage.total_tokens || 0;
+      usageTracker.track(currentModel, tokens, true, attempt > 0 ? currentModel : null);
+      if (attempt > 0) console.log('故障转移成功: ' + originalModel + ' -> ' + currentModel);
+      return result;
+    } catch (error) {
+      lastError = error; usageTracker.track(currentModel, 0, false);
+      if (!isRetryableError(error) || !failoverConfig.enabled) throw error;
+      if (attempt < failoverConfig.fallbackModels.length) {
+        const fb = failoverConfig.fallbackModels[attempt];
+        if (!fb.apiKey && fb.apiKey !== 'ollama') { console.log('跳过 ' + fb.name + '（未配置Key）'); continue; }
+        currentModel = fb.model; currentBaseUrl = fb.baseUrl; currentApiKey = fb.apiKey;
+        console.log('故障转移: ' + originalModel + ' 失败，尝试 ' + fb.name + '...');
+        await new Promise(r => setTimeout(r, 500));
+      }
+    }
   }
-  
-  // Detect provider type
+  throw new Error('所有模型均失败。最后错误(' + currentModel + '): ' + (lastError && lastError.message));
+}
+
+async function callAIWithModel(messages, model, baseUrl, apiKey) {
+  const isLocalModel = model.includes(':') && !model.includes('/') && !model.includes('gpt') && !model.includes('claude') && !model.includes('gemini');
+  if (isLocalModel) { baseUrl = 'http://localhost:11434/v1'; apiKey = 'ollama'; }
   const isAnthropic = baseUrl.includes('anthropic.com');
   const isGemini = baseUrl.includes('generativelanguage.googleapis.com') || baseUrl.includes('gemini');
-  
   if (isAnthropic) {
-    // Anthropic Messages API format
     const systemMsg = messages.find(m => m.role === 'system');
     const userMessages = messages.filter(m => m.role !== 'system');
-    const response = await fetch(`${baseUrl}/messages`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: model,
-        max_tokens: 8000,
-        system: systemMsg ? systemMsg.content : undefined,
-        messages: userMessages
-      })
-    });
-    if (!response.ok) {
-      const err = await response.text();
-      throw new Error(`API错误 ${response.status}：${err.slice(0, 200)}`);
-    }
+    const response = await fetch(baseUrl + '/messages', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' }, body: JSON.stringify({ model: model, max_tokens: 8000, system: systemMsg ? systemMsg.content : undefined, messages: userMessages }) });
+    if (!response.ok) { const err = await response.text(); throw new Error('API错误 ' + response.status + '：' + err.slice(0, 200)); }
     const data = await response.json();
-    // Convert Anthropic response to OpenAI format
-    return { choices: [{ message: { content: data.content[0].text } }] };
+    return { choices: [{ message: { content: data.content.text } }], usage: data.usage };
   }
-  
   if (isGemini) {
-    // Gemini API format
     const systemMsg = messages.find(m => m.role === 'system');
-    const contents = messages.filter(m => m.role !== 'system').map(m => ({
-      role: m.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: m.content }]
-    }));
-    const url = `${baseUrl}/models/${model}:generateContent?key=${apiKey}`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: contents,
-        systemInstruction: systemMsg ? { parts: [{ text: systemMsg.content }] } : undefined,
-        generationConfig: { maxOutputTokens: 8000, temperature: 0.7 }
-      })
-    });
-    if (!response.ok) {
-      const err = await response.text();
-      throw new Error(`API错误 ${response.status}：${err.slice(0, 200)}`);
-    }
+    const contents = messages.filter(m => m.role !== 'system').map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] }));
+    const url = baseUrl + '/models/' + model + ':generateContent?key=' + apiKey;
+    const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: contents, systemInstruction: systemMsg ? { parts: [{ text: systemMsg.content }] } : undefined, generationConfig: { maxOutputTokens: 8000, temperature: 0.7 } }) });
+    if (!response.ok) { const err = await response.text(); throw new Error('API错误 ' + response.status + '：' + err.slice(0, 200)); }
     const data = await response.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    return { choices: [{ message: { content: text } }] };
+    const text = (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0] && data.candidates[0].content.parts[0].text) || '';
+    return { choices: [{ message: { content: text } }], usage: { total_tokens: 0 } };
   }
-  
-  // Default: OpenAI-compatible format (火山引擎, OpenAI, DeepSeek, 通义, 智谱, Kimi, Ollama, LM Studio, OpenRouter, etc.)
-  const response = await fetch(`${baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`
-    },
-    body: JSON.stringify({
-      model: model,
-      messages: messages,
-      temperature: 0.7,
-      max_tokens: 8000,
-      ...(isLocalModel ? { options: { num_ctx: 2048, num_batch: 512 } } : {})
-    })
-  });
-  
-  if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`API错误 ${response.status}：${err.slice(0, 200)}`);
-  }
-  
+  const response = await fetch(baseUrl + '/chat/completions', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey }, body: JSON.stringify({ model: model, messages: messages, temperature: 0.7, max_tokens: 8000 }) });
+  if (!response.ok) { const err = await response.text(); throw new Error('API错误 ' + response.status + '：' + err.slice(0, 200)); }
   return response.json();
+}
+
+
+// Streaming version of callAI for real-time progress
+async function callAIStream(messages, modelOverride, onChunk) {
+  let model = modelOverride || aiSettings.model;
+  let baseUrl = aiSettings.baseUrl.replace(/\/\$/, '');
+  let apiKey = aiSettings.apiKey;
+  const isLocalModel = model.includes(':') && !model.includes('/');
+  if (isLocalModel) { baseUrl = 'http://localhost:11434/v1'; apiKey = 'ollama'; }
+  const response = await fetch(baseUrl + '/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
+    body: JSON.stringify({ model, messages, temperature: 0.7, max_tokens: 8000, stream: true })
+  });
+  if (!response.ok) { const err = await response.text(); throw new Error('API错误 ' + response.status); }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let fullContent = '', buffer = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop();
+    for (const line of lines) {
+      if (line.startsWith('data: ') && line !== 'data: [DONE]') {
+        try {
+          const json = JSON.parse(line.slice(6));
+          const chunk = json.choices?.[0]?.delta?.content || '';
+          if (chunk) { fullContent += chunk; if (onChunk) onChunk(fullContent, chunk); }
+        } catch (e) {}
+      }
+    }
+  }
+  return { choices: [{ message: { content: fullContent } }] };
 }
 
 // Get model for a specific agent role
