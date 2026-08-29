@@ -146,6 +146,39 @@ body { min-width:1280px; }
 .progress-ring-fill { fill: none; stroke: var(--accent); stroke-width: 6; stroke-linecap: round; transition: stroke-dashoffset 0.5s ease; }
 .progress-ring-text { position: absolute; font-family: var(--mono); font-size: 14px; font-weight: 700; color: var(--text-primary); }
 
+/* File Panel */
+.file-panel { padding: 12px; }
+.file-usage { margin-bottom: 12px; padding: 10px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; }
+.usage-bar { height: 6px; background: var(--bg-deep); border-radius: 3px; overflow: hidden; }
+.usage-fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.3s; }
+.file-cats { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 12px; }
+.file-cat { display: flex; align-items: center; gap: 4px; padding: 5px 10px; font-size: 11px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; cursor: pointer; color: var(--text-secondary); transition: all 0.15s; white-space: nowrap; }
+.file-cat:hover { border-color: var(--border-light); color: var(--text-primary); }
+.file-cat.active { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
+.file-cat-count { font-family: var(--mono); font-size: 10px; opacity: 0.7; }
+.file-upload-area { text-align: center; padding: 20px 12px; border: 2px dashed var(--border); border-radius: 8px; margin-bottom: 12px; transition: all 0.15s; }
+.file-upload-area.dragover { border-color: var(--accent); background: var(--accent-dim); }
+.file-upload-btn { margin-top: 8px; padding: 6px 16px; font-size: 12px; background: var(--accent); color: #000; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-family: var(--sans); }
+.file-upload-btn:hover { opacity: 0.9; }
+.file-empty { text-align: center; padding: 24px 12px; font-size: 12px; color: var(--text-muted); }
+.file-list { display: flex; flex-direction: column; gap: 6px; }
+.file-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; transition: all 0.15s; }
+.file-item:hover { border-color: var(--border-light); background: var(--bg-hover); }
+.file-icon { font-size: 20px; flex-shrink: 0; }
+.file-info { min-width: 0; }
+.file-name { font-size: 12px; font-weight: 500; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.file-meta { font-size: 10px; color: var(--text-muted); font-family: var(--mono); margin-top: 2px; }
+.file-actions { display: flex; gap: 2px; flex-shrink: 0; }
+.file-action-btn { width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; background: none; border: 1px solid var(--border); border-radius: 5px; cursor: pointer; font-size: 12px; color: var(--text-secondary); transition: all 0.15s; }
+.file-action-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+.file-action-btn.file-delete:hover { border-color: var(--red); color: var(--red); background: var(--red-dim); }
+
+/* File Preview Modal */
+.file-preview-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 3000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+.file-preview-content { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; max-width: 95vw; max-height: 90vh; display: flex; flex-direction: column; }
+.file-preview-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--bg-card); }
+.file-preview-content > *:not(.file-preview-header) { padding: 16px; overflow: auto; }
+
 .sidebar { background:var(--bg-panel); border-right:1px solid var(--border); overflow-y:auto; padding:16px 0; }
 .sidebar .section-title { padding:8px 20px; font-size:11px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-muted); }
 .stage-item { padding:10px 20px; cursor:pointer; border-left:3px solid transparent; transition:all 0.15s; }
@@ -453,6 +486,7 @@ body { min-width:1280px; }
     <div class="tabs">
       <div class="tab active" id="tab-notif" onclick="switchTab('notif')">通知中心</div>
       <div class="tab" id="tab-timeline" onclick="switchTab('timeline')">决策审计</div>
+      <div class="tab" id="tab-files" onclick="switchTab('files')">文件库</div>
     </div>
     <div id="panel-notif">
       <div class="notif-header">
@@ -463,6 +497,9 @@ body { min-width:1280px; }
     </div>
     <div id="panel-timeline" style="display:none;">
       <div class="timeline-list" id="timeline-list"></div>
+    </div>
+    <div id="panel-files" style="display:none;">
+      <div id="file-panel-content">加载中...</div>
     </div>
 
     <div class="stats-section">
@@ -800,6 +837,284 @@ function resetAll() {
   location.reload();
 }
 
+// ===== IndexedDB File Storage =====
+const DB_NAME = 'decision-console-files';
+const DB_VERSION = 1;
+const STORE_NAME = 'files';
+
+let fileDB = null;
+
+function initFileDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        const store = db.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
+        store.createIndex('category', 'category', { unique: false });
+        store.createIndex('uploadedAt', 'uploadedAt', { unique: false });
+      }
+    };
+    req.onsuccess = (e) => { fileDB = e.target.result; resolve(fileDB); };
+    req.onerror = (e) => reject(e.target.error);
+  });
+}
+
+function saveFile(file, category) {
+  return new Promise((resolve, reject) => {
+    const tx = fileDB.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    const record = {
+      name: file.name,
+      type: file.type || 'application/octet-stream',
+      size: file.size,
+      category: category || 'other',
+      blob: file,
+      uploadedAt: Date.now(),
+      note: ''
+    };
+    const req = store.add(record);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function getAllFiles() {
+  return new Promise((resolve, reject) => {
+    const tx = fileDB.transaction(STORE_NAME, 'readonly');
+    const store = tx.objectStore(STORE_NAME);
+    const req = store.getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function getFile(id) {
+  return new Promise((resolve, reject) => {
+    const tx = fileDB.transaction(STORE_NAME, 'readonly');
+    const store = tx.objectStore(STORE_NAME);
+    const req = store.get(id);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function deleteFile(id) {
+  return new Promise((resolve, reject) => {
+    const tx = fileDB.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    const req = store.delete(id);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function getStorageUsage() {
+  return new Promise((resolve) => {
+    if (navigator.storage && navigator.storage.estimate) {
+      navigator.storage.estimate().then(est => {
+        resolve({ used: est.usage || 0, quota: est.quota || 0 });
+      }).catch(() => resolve({ used: 0, quota: 0 }));
+    } else {
+      resolve({ used: 0, quota: 0 });
+    }
+  });
+}
+
+function formatFileSize(bytes) {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+function getFileIcon(type, name) {
+  if (type.startsWith('image/')) return '🖼';
+  if (type === 'application/pdf' || name.endsWith('.pdf')) return '📕';
+  if (type.startsWith('text/') || name.match(/\.(txt|md|csv|json|xml|html)$/i)) return '📄';
+  if (name.match(/\.(doc|docx)$/i)) return '📘';
+  if (name.match(/\.(xls|xlsx)$/i)) return '📗';
+  if (name.match(/\.(ppt|pptx)$/i)) return '📙';
+  if (name.match(/\.(zip|rar|7z|tar|gz)$/i)) return '📦';
+  if (type.startsWith('video/')) return '🎬';
+  if (type.startsWith('audio/')) return '🎵';
+  return '📎';
+}
+
+let currentFileCategory = 'all';
+
+async function renderFilePanel() {
+  const files = await getAllFiles();
+  const filtered = currentFileCategory === 'all' ? files : files.filter(f => f.category === currentFileCategory);
+  const usage = await getStorageUsage();
+  
+  const categories = [
+    { key: 'all', label: '全部', icon: '📁' },
+    { key: 'problem', label: '比赛题目', icon: '📋' },
+    { key: 'appendix', label: '附录', icon: '📎' },
+    { key: 'data', label: '数据', icon: '📊' },
+    { key: 'other', label: '其他', icon: '🗂' }
+  ];
+  
+  let html = '<div class="file-panel">';
+  
+  // Storage usage
+  const usagePct = usage.quota > 0 ? Math.round((usage.used / usage.quota) * 100) : 0;
+  html += `<div class="file-usage">
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-secondary);margin-bottom:4px;">
+      <span>存储用量</span>
+      <span>${formatFileSize(usage.used)} / ${formatFileSize(usage.quota)}</span>
+    </div>
+    <div class="usage-bar"><div class="usage-fill" style="width:${usagePct}%"></div></div>
+  </div>`;
+  
+  // Category tabs
+  html += '<div class="file-cats">';
+  categories.forEach(c => {
+    const count = c.key === 'all' ? files.length : files.filter(f => f.category === c.key).length;
+    html += `<div class="file-cat ${currentFileCategory===c.key?'active':''}" onclick="switchFileCategory('${c.key}')">
+      <span>${c.icon}</span> ${c.label} <span class="file-cat-count">${count}</span>
+    </div>`;
+  });
+  html += '</div>';
+  
+  // Upload area
+  html += `<div class="file-upload-area" id="file-drop-zone" 
+    ondragover="event.preventDefault();this.classList.add('dragover')" 
+    ondragleave="this.classList.remove('dragover')"
+    ondrop="handleFileDrop(event)">
+    <div style="font-size:24px;margin-bottom:6px;">⬆</div>
+    <div style="font-size:12px;color:var(--text-secondary);">拖拽文件到此处，或</div>
+    <button class="file-upload-btn" onclick="document.getElementById('file-input').click()">选择文件上传</button>
+    <input type="file" id="file-input" multiple style="display:none" onchange="handleFileSelect(event)">
+  </div>`;
+  
+  // File list
+  if (filtered.length === 0) {
+    html += '<div class="file-empty">暂无文件，上传比赛题目、附录、数据等</div>';
+  } else {
+    html += '<div class="file-list">';
+    filtered.sort((a, b) => b.uploadedAt - a.uploadedAt).forEach(f => {
+      const date = new Date(f.uploadedAt);
+      const dateStr = `${date.getMonth()+1}/${date.getDate()} ${date.getHours()}:${String(date.getMinutes()).padStart(2,'0')}`;
+      html += `<div class="file-item">
+        <div class="file-icon">${getFileIcon(f.type, f.name)}</div>
+        <div class="file-info" style="flex:1;min-width:0;">
+          <div class="file-name" title="${f.name}">${f.name}</div>
+          <div class="file-meta">${formatFileSize(f.size)} · ${dateStr}</div>
+        </div>
+        <div class="file-actions">
+          <button class="file-action-btn" title="预览" onclick="previewFile(${f.id})">👁</button>
+          <button class="file-action-btn" title="下载" onclick="downloadFile(${f.id})">⬇</button>
+          <button class="file-action-btn file-delete" title="删除" onclick="removeFile(${f.id})">✕</button>
+        </div>
+      </div>`;
+    });
+    html += '</div>';
+  }
+  
+  html += '</div>';
+  document.getElementById('panel-files').innerHTML = html;
+}
+
+function switchFileCategory(cat) {
+  currentFileCategory = cat;
+  renderFilePanel();
+}
+
+async function handleFileSelect(e) {
+  const files = Array.from(e.target.files);
+  await uploadFiles(files);
+  e.target.value = '';
+}
+
+async function handleFileDrop(e) {
+  e.preventDefault();
+  document.getElementById('file-drop-zone').classList.remove('dragover');
+  const files = Array.from(e.dataTransfer.files);
+  await uploadFiles(files);
+}
+
+async function uploadFiles(files) {
+  if (files.length === 0) return;
+  const category = currentFileCategory === 'all' ? 'other' : currentFileCategory;
+  let success = 0;
+  for (const file of files) {
+    try {
+      await saveFile(file, category);
+      success++;
+    } catch (err) {
+      console.error('Upload failed:', err);
+    }
+  }
+  showToast('success', `已上传 ${success} 个文件到「${category === 'problem' ? '比赛题目' : category === 'appendix' ? '附录' : category === 'data' ? '数据' : '其他'}」`);
+  renderFilePanel();
+}
+
+async function previewFile(id) {
+  const f = await getFile(id);
+  if (!f) return;
+  const url = URL.createObjectURL(f.blob);
+  
+  // Create preview modal
+  const modal = document.createElement('div');
+  modal.className = 'file-preview-modal';
+  modal.onclick = (e) => { if (e.target === modal) { modal.remove(); URL.revokeObjectURL(url); } };
+  
+  let content = '';
+  if (f.type.startsWith('image/')) {
+    content = `<img src="${url}" style="max-width:90vw;max-height:80vh;object-fit:contain;border-radius:8px;">`;
+  } else if (f.type === 'application/pdf' || f.name.endsWith('.pdf')) {
+    content = `<iframe src="${url}" style="width:90vw;height:80vh;border:none;border-radius:8px;background:#fff;"></iframe>`;
+  } else if (f.type.startsWith('text/') || f.name.match(/\.(txt|md|csv|json|xml)$/i)) {
+    const text = await f.blob.text();
+    content = `<pre style="max-width:90vw;max-height:80vh;overflow:auto;background:var(--bg-card);padding:20px;border-radius:8px;font-family:var(--mono);font-size:12px;white-space:pre-wrap;word-break:break-all;">${escapeHtml(text)}</pre>`;
+  } else {
+    content = `<div style="text-align:center;padding:40px;">
+      <div style="font-size:48px;margin-bottom:16px;">${getFileIcon(f.type, f.name)}</div>
+      <div style="font-size:16px;margin-bottom:8px;">${f.name}</div>
+      <div style="font-size:13px;color:var(--text-secondary);margin-bottom:20px;">${formatFileSize(f.size)} · ${f.type || '未知类型'}</div>
+      <a href="${url}" download="${f.name}" style="display:inline-block;padding:10px 24px;background:var(--accent);color:#000;border-radius:8px;text-decoration:none;font-weight:600;">下载文件</a>
+    </div>`;
+  }
+  
+  modal.innerHTML = `<div class="file-preview-content">
+    <div class="file-preview-header">
+      <span style="font-size:13px;font-weight:600;">${f.name}</span>
+      <button style="background:none;border:none;color:var(--text-secondary);font-size:18px;cursor:pointer;" onclick="this.closest('.file-preview-modal').remove();URL.revokeObjectURL('${url}')">✕</button>
+    </div>
+    ${content}
+  </div>`;
+  document.body.appendChild(modal);
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+async function downloadFile(id) {
+  const f = await getFile(id);
+  if (!f) return;
+  const url = URL.createObjectURL(f.blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = f.name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function removeFile(id) {
+  const f = await getFile(id);
+  if (!f) return;
+  if (!confirm(`确定删除文件「${f.name}」吗？`)) return;
+  await deleteFile(id);
+  showToast('info', `已删除「${f.name}」`);
+  renderFilePanel();
+}
+
 // ===== Theme & Visual Enhancements =====
 let currentTheme = localStorage.getItem('theme') || 'dark';
 
@@ -913,6 +1228,9 @@ document.addEventListener('keydown', (e) => {
 
 function init() {
   applyTheme(currentTheme);
+  initFileDB().then(() => {
+    if (activeTab === 'files') renderFilePanel();
+  }).catch(err => console.warn('File DB init failed:', err));
   const loaded = loadState();
   renderSidebar();
   renderPipeline();
@@ -1369,8 +1687,11 @@ function switchTab(tab) {
   activeTab = tab;
   document.getElementById('tab-notif').classList.toggle('active', tab==='notif');
   document.getElementById('tab-timeline').classList.toggle('active', tab==='timeline');
+  document.getElementById('tab-files').classList.toggle('active', tab==='files');
   document.getElementById('panel-notif').style.display = tab==='notif' ? 'block' : 'none';
   document.getElementById('panel-timeline').style.display = tab==='timeline' ? 'block' : 'none';
+  document.getElementById('panel-files').style.display = tab==='files' ? 'block' : 'none';
+  if (tab === 'files') renderFilePanel();
 }
 
 function addTimelineEvent(type, title, desc, gate, verdict) {
