@@ -1180,7 +1180,19 @@ body { min-width:1280px; }
       <div class="ai-form-group">
         <label class="ai-form-label">模型名称 (Model ID)</label>
         <input type="text" class="ai-form-input" id="ai-model" placeholder="doubao-seed-2-0-lite-260428" value="doubao-seed-2-0-lite-260428">
-        <div class="ai-form-hint">在火山方舟「在线推理」中创建模型接入点后获取模型ID</div>
+        <div class="ai-form-hint">默认模型，所有Agent共用；下方可为不同Agent单独配置</div>
+      </div>
+      <div class="ai-form-group">
+        <label class="ai-form-label" style="cursor:pointer;display:flex;align-items:center;gap:6px;" onclick="toggleModelConfig()">
+          <span id="model-config-toggle">▶</span> 🤖 按Agent角色配置不同模型（可选）
+        </label>
+        <div id="agent-model-config" style="display:none;margin-top:10px;padding:12px;background:var(--bg-deep);border-radius:8px;">
+          <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">为不同Agent角色配置专用模型，留空则使用默认模型。简单任务可用轻量模型，复杂推理建议用强模型。</div>
+          <div id="agent-model-list"></div>
+          <div style="margin-top:8px;font-size:10px;color:var(--text-muted);">
+            推荐：问题分析师/程序员→轻量模型；建模专家/结果分析师→强模型；评论家→平衡模型
+          </div>
+        </div>
       </div>
       <div class="ai-form-group">
         <label class="ai-form-label">
@@ -1959,10 +1971,12 @@ function loadAiSettings() {
   if (saved) {
     try { aiSettings = { ...aiSettings, ...JSON.parse(saved) }; } catch(e) {}
   }
+  if (!aiSettings.agentModels) aiSettings.agentModels = {};
   document.getElementById('ai-base-url').value = aiSettings.baseUrl;
   document.getElementById('ai-api-key').value = aiSettings.apiKey;
   document.getElementById('ai-model').value = aiSettings.model;
   document.getElementById('ai-auto-fill').checked = aiSettings.autoFill;
+  renderAgentModelConfig();
 }
 
 function saveAiSettings() {
@@ -1970,9 +1984,51 @@ function saveAiSettings() {
   aiSettings.apiKey = document.getElementById('ai-api-key').value.trim();
   aiSettings.model = document.getElementById('ai-model').value.trim();
   aiSettings.autoFill = document.getElementById('ai-auto-fill').checked;
+  
+  // Save per-agent models
+  aiSettings.agentModels = {};
+  const agentKeys = ['problemAnalyst', 'modelingExpert', 'coder', 'resultAnalyst', 'paperWriter', 'qualityAuditor', 'critic'];
+  agentKeys.forEach(key => {
+    const input = document.getElementById(`agent-model-${key}`);
+    if (input && input.value.trim()) {
+      aiSettings.agentModels[key] = input.value.trim();
+    }
+  });
+  
   localStorage.setItem('aiSettings', JSON.stringify(aiSettings));
   closeAiSettings();
   showToast('success', 'AI设置已保存');
+}
+
+function toggleModelConfig() {
+  const panel = document.getElementById('agent-model-config');
+  const toggle = document.getElementById('model-config-toggle');
+  if (panel.style.display === 'none') {
+    panel.style.display = 'block';
+    toggle.textContent = '▼';
+  } else {
+    panel.style.display = 'none';
+    toggle.textContent = '▶';
+  }
+}
+
+function renderAgentModelConfig() {
+  const list = document.getElementById('agent-model-list');
+  if (!list) return;
+  const agentKeys = ['problemAnalyst', 'modelingExpert', 'coder', 'resultAnalyst', 'paperWriter', 'qualityAuditor', 'critic'];
+  list.innerHTML = agentKeys.map(key => {
+    const agent = agentRoles[key];
+    const value = (aiSettings.agentModels && aiSettings.agentModels[key]) || '';
+    return `
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+        <span style="width:110px;font-size:11px;flex-shrink:0;">${agent.icon} ${agent.name}</span>
+        <input type="text" class="ai-form-input" id="agent-model-${key}" 
+          placeholder="默认: ${aiSettings.model}" 
+          value="${value}"
+          style="flex:1;padding:4px 8px;font-size:11px;">
+      </div>
+    `;
+  }).join('');
 }
 
 function openAiSettings() {
@@ -2561,10 +2617,14 @@ async function executeGateAI(gateId) {
     // Multi-agent execution with real-time progress
     const { result, conversation } = await executeGateMultiAgent(gateId, (progress) => {
       const agent = progress.agent || {};
+      const modelName = progress.phase === 'critic' || progress.phase === 'critic-done' 
+        ? getAgentModel('critic') 
+        : getAgentModel(gateAgentMap[gateId]);
+      const modelShort = modelName.length > 25 ? modelName.slice(0, 22) + '...' : modelName;
       const phaseText = {
-        'primary': `${agent.icon || '🤖'} ${agent.name || '主Agent'} 正在生成...（第${progress.round + 1}轮）`,
+        'primary': `${agent.icon || '🤖'} ${agent.name || '主Agent'} 生成中...（第${progress.round + 1}轮 · ${modelShort}）`,
         'primary-done': `${agent.icon || '🤖'} ${agent.name || '主Agent'} 生成完成`,
-        'critic': `⚖️ 评论家正在审查...（第${progress.round + 1}轮）`,
+        'critic': `⚖️ 评论家审查中...（第${progress.round + 1}轮 · ${modelShort}）`,
         'critic-done': `⚖️ 评论家审查完成`
       }[progress.phase] || '执行中...';
       showToast('info', phaseText);
@@ -2891,7 +2951,7 @@ async function executeGateMultiAgent(gateId, onProgress) {
       { role: 'user', content: basePrompt + (round > 0 ? `\n\n【评论家反馈】请根据以下评论家的反馈修改你的输出：\n${conversation[conversation.length-1].criticFeedback}` : '') }
     ];
     
-    const primaryResponse = await callAI(primaryMessages);
+    const primaryResponse = await callAI(primaryMessages, getAgentModel(primaryAgentKey));
     const primaryResult = primaryResponse.choices[0].message.content;
     conversation.push({ round, agent: primaryAgentKey, content: primaryResult });
     
@@ -2911,7 +2971,7 @@ async function executeGateMultiAgent(gateId, onProgress) {
       { role: 'user', content: `请审查以下数学建模${g.name}的输出，从逻辑严谨性、数据准确性、方法合理性、表达清晰度四个维度进行批判性评估。\n\n如果发现问题，明确指出：1)问题位置 2)具体问题 3)改进建议。\n如果质量达标，明确回复"审查通过"。\n\n【待审查输出】\n${primaryResult.slice(0, 6000)}` }
     ];
     
-    const criticResponse = await callAI(criticMessages);
+    const criticResponse = await callAI(criticMessages, getAgentModel('critic'));
     const criticFeedback = criticResponse.choices[0].message.content;
     conversation[conversation.length-1].criticFeedback = criticFeedback;
     
@@ -2937,8 +2997,9 @@ async function executeGateMultiAgent(gateId, onProgress) {
   return { result: finalResult, conversation };
 }
 
-// Helper: call AI API
-async function callAI(messages) {
+// Helper: call AI API with optional model override
+async function callAI(messages, modelOverride) {
+  const model = modelOverride || aiSettings.model;
   const response = await fetch(`${aiSettings.baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
@@ -2946,7 +3007,7 @@ async function callAI(messages) {
       'Authorization': `Bearer ${aiSettings.apiKey}`
     },
     body: JSON.stringify({
-      model: aiSettings.model,
+      model: model,
       messages: messages,
       temperature: 0.7,
       max_tokens: 8000
@@ -2959,6 +3020,14 @@ async function callAI(messages) {
   }
   
   return response.json();
+}
+
+// Get model for a specific agent role
+function getAgentModel(agentKey) {
+  if (aiSettings.agentModels && aiSettings.agentModels[agentKey]) {
+    return aiSettings.agentModels[agentKey];
+  }
+  return aiSettings.model;
 }
 
 // Gate to skill mapping (full SKILL.md content will be injected)
