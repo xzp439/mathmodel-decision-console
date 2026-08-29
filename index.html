@@ -1788,6 +1788,30 @@ async function uploadFiles(files) {
   renderFilePanel();
 }
 
+// ===== Import Sample File from URL =====
+async function importSampleFile() {
+  try {
+    const response = await fetch('sample-problem.docx');
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    const blob = await response.blob();
+    const file = new File([blob], 'B题翻译 (1).docx', { 
+      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' 
+    });
+    
+    const prevCategory = currentFileCategory;
+    currentFileCategory = 'problem';
+    await saveFile(file, 'problem');
+    currentFileCategory = prevCategory;
+    
+    showToast('success', '已自动导入示例题目文件');
+    renderFilePanel();
+    return true;
+  } catch (err) {
+    console.warn('Sample file import failed:', err);
+    return false;
+  }
+}
+
 async function previewFile(id) {
   const f = await getFile(id);
   if (!f) return;
@@ -3532,6 +3556,12 @@ function init() {
   loadAiSettings();
   initFileDB().then(() => {
     if (activeTab === 'files') renderFilePanel();
+    // Auto-import sample file if file library is empty
+    getAllFiles().then(files => {
+      if (files.length === 0) {
+        importSampleFile();
+      }
+    }).catch(() => {});
   }).catch(err => console.warn('File DB init failed:', err));
   
   // Check if splash should be shown
