@@ -179,6 +179,81 @@ body { min-width:1280px; }
 .file-preview-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--bg-card); }
 .file-preview-content > *:not(.file-preview-header) { padding: 16px; overflow: auto; }
 
+/* Start Competition CTA */
+.start-cta {
+  margin: 12px;
+  padding: 16px;
+  background: linear-gradient(135deg, var(--accent-dim), transparent);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  text-align: center;
+}
+.start-cta-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+.start-cta-desc {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+.start-cta-btn {
+  width: 100%;
+  padding: 12px;
+  font-size: 14px;
+  font-weight: 700;
+  font-family: var(--sans);
+  background: var(--accent);
+  color: #000;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.start-cta-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(245,158,11,0.3);
+}
+.start-cta-btn:disabled {
+  background: var(--bg-card);
+  color: var(--text-muted);
+  cursor: not-allowed;
+  border: 1px solid var(--border);
+}
+.start-cta-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 10px;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+.start-cta-status.ready {
+  background: var(--green-dim);
+  color: var(--green);
+  border: 1px solid var(--green);
+}
+.start-cta-status.waiting {
+  background: var(--bg-card);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+.start-cta-status .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: ctaPulse 1.5s ease-in-out infinite;
+}
+@keyframes ctaPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
 /* Splash / Welcome Screen */
 .splash-screen {
   position: fixed;
@@ -1124,6 +1199,23 @@ async function renderFilePanel() {
   
   let html = '<div class="file-panel">';
   
+  // Start Competition CTA
+  const problemFiles = files.filter(f => f.category === 'problem');
+  const hasProblem = problemFiles.length > 0;
+  const competitionStarted = state['g1'].status !== 'pending' || localStorage.getItem('competitionStarted') === 'true';
+  
+  html += `<div class="start-cta">
+    <div class="start-cta-status ${hasProblem ? 'ready' : 'waiting'}">
+      <span class="dot"></span>
+      ${hasProblem ? `已上传 ${problemFiles.length} 个题目文件` : '等待上传比赛题目'}
+    </div>
+    <div class="start-cta-title">${competitionStarted ? '竞赛进行中' : '准备开始竞赛'}</div>
+    <div class="start-cta-desc">${hasProblem ? '题目已就绪，点击开始进入G1问题解析' : '请先在「比赛题目」分类上传赛题PDF'}</div>
+    <button class="start-cta-btn" ${hasProblem ? '' : 'disabled'} onclick="startCompetition()">
+      ${competitionStarted ? '继续竞赛 →' : '开始竞赛 →'}
+    </button>
+  </div>`;
+  
   // Storage usage
   const usagePct = usage.quota > 0 ? Math.round((usage.used / usage.quota) * 100) : 0;
   html += `<div class="file-usage">
@@ -1278,6 +1370,21 @@ async function removeFile(id) {
   await deleteFile(id);
   showToast('info', `已删除「${f.name}」`);
   renderFilePanel();
+}
+
+// ===== Start Competition =====
+function startCompetition() {
+  localStorage.setItem('competitionStarted', 'true');
+  // Switch to main view and select G1
+  selectGate('g1');
+  // Add notification
+  addNotification('gate-trigger', '竞赛已开始', '比赛题目已上传，G1问题解析阶段已启动，请确认评价标准和问题类型。', new Date().toTimeString().slice(0,8));
+  // Add timeline event
+  addTimelineEvent('info', '竞赛开始', '比赛题目已上传，进入G1问题解析阶段', 'G1', 'start');
+  // Show toast
+  showToast('success', '竞赛已开始！进入G1问题解析阶段');
+  // Re-render file panel to update button state
+  if (activeTab === 'files') renderFilePanel();
 }
 
 // ===== Theme & Visual Enhancements =====
