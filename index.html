@@ -3551,6 +3551,32 @@ function showSplash() {
   document.getElementById('splash-screen').classList.remove('hide');
 }
 
+// ===== Auto Run from URL Parameter =====
+function checkAutoRun() {
+  const params = new URLSearchParams(window.location.search);
+  if (!params.has('autorun')) return;
+  
+  console.log('Auto-run mode enabled');
+  showToast('info', '自动执行模式已启用，3秒后开始...');
+  
+  // Override confirm/alert to avoid blocking
+  window.confirm = () => true;
+  window.alert = () => {};
+  
+  // Hide splash screen
+  document.getElementById('splash-screen').classList.add('hide');
+  
+  // Wait for page to fully render, then execute all gates
+  setTimeout(() => {
+    if (typeof executeAllGates === 'function') {
+      showToast('info', '开始自动执行全部Gate...');
+      executeAllGates();
+    } else {
+      console.error('executeAllGates function not found');
+    }
+  }, 3000);
+}
+
 function init() {
   applyTheme(currentTheme);
   loadAiSettings();
@@ -3559,9 +3585,17 @@ function init() {
     // Auto-import sample file if file library is empty
     getAllFiles().then(files => {
       if (files.length === 0) {
-        importSampleFile();
+        importSampleFile().then(() => {
+          // Check for autorun URL parameter after file import
+          checkAutoRun();
+        });
+      } else {
+        // Check for autorun URL parameter immediately
+        checkAutoRun();
       }
-    }).catch(() => {});
+    }).catch(() => {
+      checkAutoRun();
+    });
   }).catch(err => console.warn('File DB init failed:', err));
   
   // Check if splash should be shown
