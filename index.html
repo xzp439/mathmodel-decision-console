@@ -260,6 +260,161 @@ body { min-width:1280px; }
   50% { opacity: 0.4; }
 }
 
+/* AI Settings & Analysis */
+.ai-modal {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 4000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(4px);
+}
+.ai-modal.show { display: flex; }
+.ai-modal-content {
+  width: 90%;
+  max-width: 520px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  animation: cmdSlideIn 0.15s ease;
+}
+.ai-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-card);
+}
+.ai-modal-header h3 {
+  font-size: 15px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ai-modal-body { padding: 20px; }
+.ai-form-group { margin-bottom: 16px; }
+.ai-form-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+.ai-form-input {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: var(--mono);
+  outline: none;
+  transition: border-color 0.15s;
+}
+.ai-form-input:focus { border-color: var(--accent); }
+.ai-form-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  line-height: 1.5;
+}
+.ai-form-hint a { color: var(--accent); text-decoration: none; }
+.ai-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-card);
+}
+.ai-btn {
+  padding: 8px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-family: var(--sans);
+  transition: all 0.15s;
+}
+.ai-btn:hover { border-color: var(--border-light); color: var(--text-primary); }
+.ai-btn.primary {
+  background: var(--accent);
+  color: #000;
+  border-color: var(--accent);
+}
+.ai-btn.primary:hover { opacity: 0.9; }
+.ai-btn.primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* AI Analysis Loading */
+.ai-analysis-loading {
+  text-align: center;
+  padding: 40px 20px;
+}
+.ai-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 16px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.ai-loading-text {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.8;
+}
+.ai-loading-step {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 8px;
+  font-family: var(--mono);
+}
+
+/* AI Analysis Result */
+.ai-result-content {
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 16px;
+}
+.ai-result-section {
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.ai-result-section:last-child { border-bottom: none; margin-bottom: 0; }
+.ai-result-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ai-result-body {
+  font-size: 12px;
+  color: var(--text-primary);
+  line-height: 1.8;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.ai-result-body ul { padding-left: 20px; margin: 4px 0; }
+.ai-result-body li { margin-bottom: 4px; }
+
 /* Splash / Welcome Screen */
 .splash-screen {
   position: fixed;
@@ -686,6 +841,7 @@ body { min-width:1280px; }
     </div>
     <div class="spacer"></div>
     <div style="display:flex;gap:8px;">
+      <button class="topbar-btn" onclick="openAiSettings()" title="AI分析设置">⚙️ AI</button>
       <button class="topbar-btn" onclick="toggleTheme()" title="切换主题（浅色/深色/系统）" id="theme-btn">◐ 主题</button>
       <button class="topbar-btn" onclick="openCommandPalette()" title="命令面板 (Ctrl+K)">⌘ 命令</button>
       <button class="topbar-btn" onclick="exportData()" title="导出JSON备份">⤓ 导出</button>
@@ -809,6 +965,58 @@ body { min-width:1280px; }
   <div class="cmd-palette">
     <input type="text" class="cmd-input" id="cmd-input" placeholder="输入命令或搜索Gate..." oninput="filterCommands()" onkeydown="handleCmdKey(event)">
     <div class="cmd-list" id="cmd-list"></div>
+  </div>
+</div>
+
+<!-- AI Settings Modal -->
+<div class="ai-modal" id="ai-settings-modal">
+  <div class="ai-modal-content">
+    <div class="ai-modal-header">
+      <h3>⚙️ AI 分析设置</h3>
+      <button style="background:none;border:none;color:var(--text-secondary);font-size:18px;cursor:pointer;" onclick="closeAiSettings()">✕</button>
+    </div>
+    <div class="ai-modal-body">
+      <div class="ai-form-group">
+        <label class="ai-form-label">API 地址 (Base URL)</label>
+        <input type="text" class="ai-form-input" id="ai-base-url" placeholder="https://ark.cn-beijing.volces.com/api/v3" value="https://ark.cn-beijing.volces.com/api/v3">
+        <div class="ai-form-hint">豆包/火山方舟默认地址，OpenAI兼容格式</div>
+      </div>
+      <div class="ai-form-group">
+        <label class="ai-form-label">API Key</label>
+        <input type="password" class="ai-form-input" id="ai-api-key" placeholder="sk-xxxxxxxxxxxxxxxx">
+        <div class="ai-form-hint">在 <a href="https://console.volcengine.com/ark" target="_blank">火山方舟控制台</a> 申请，仅保存在本地浏览器</div>
+      </div>
+      <div class="ai-form-group">
+        <label class="ai-form-label">模型名称 (Model ID)</label>
+        <input type="text" class="ai-form-input" id="ai-model" placeholder="doubao-seed-1-6-250615" value="doubao-seed-1-6-250615">
+        <div class="ai-form-hint">在火山方舟「在线推理」中创建模型接入点后获取模型ID</div>
+      </div>
+      <div class="ai-form-group">
+        <label class="ai-form-label">
+          <input type="checkbox" id="ai-auto-fill" checked style="accent-color:var(--accent);"> 
+          分析完成后自动填充到G1面板
+        </label>
+      </div>
+    </div>
+    <div class="ai-modal-footer">
+      <button class="ai-btn" onclick="testAiConnection()">🔌 测试连接</button>
+      <button class="ai-btn primary" onclick="saveAiSettings()">保存设置</button>
+    </div>
+  </div>
+</div>
+
+<!-- AI Analysis Result Modal -->
+<div class="ai-modal" id="ai-result-modal">
+  <div class="ai-modal-content" style="max-width:700px;">
+    <div class="ai-modal-header">
+      <h3 id="ai-result-title">🤖 AI 题目分析结果</h3>
+      <button style="background:none;border:none;color:var(--text-secondary);font-size:18px;cursor:pointer;" onclick="closeAiResult()">✕</button>
+    </div>
+    <div id="ai-result-body" class="ai-result-content"></div>
+    <div class="ai-modal-footer" id="ai-result-footer" style="display:none;">
+      <button class="ai-btn" onclick="copyAiResult()">📋 复制结果</button>
+      <button class="ai-btn primary" onclick="applyAiToG1()">✅ 应用到G1面板</button>
+    </div>
   </div>
 </div>
 
@@ -1220,7 +1428,8 @@ async function renderFilePanel() {
     <button class="start-cta-btn" ${hasProblem ? '' : 'disabled'} onclick="startCompetition()">
       ${competitionStarted ? '继续竞赛 →' : '开始竞赛 →'}
     </button>
-    ${hasProblem ? `<button style="width:100%;margin-top:8px;padding:8px;font-size:12px;font-weight:600;background:var(--bg-card);color:var(--accent);border:1px solid var(--accent);border-radius:6px;cursor:pointer;" onclick="extractAllProblemText()">📄 提取全部题目文本（发给AI分析）</button>` : ''}
+    ${hasProblem ? `<button style="width:100%;margin-top:8px;padding:8px;font-size:12px;font-weight:600;background:var(--bg-card);color:var(--accent);border:1px solid var(--accent);border-radius:6px;cursor:pointer;" onclick="extractAllProblemText()">📄 提取题目文本</button>
+    <button style="width:100%;margin-top:8px;padding:10px;font-size:13px;font-weight:700;background:linear-gradient(135deg,var(--accent),#fbbf24);color:#000;border:none;border-radius:6px;cursor:pointer;" onclick="aiAnalyzeProblem()">🤖 AI 自动解析题目</button>` : ''}
   </div>`;
   
   // Storage usage
@@ -1519,6 +1728,267 @@ function copyCurrentText() {
   });
 }
 
+// ===== AI Analysis =====
+let aiSettings = {
+  baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
+  apiKey: '',
+  model: 'doubao-seed-1-6-250615',
+  autoFill: true
+};
+let aiAnalysisResult = '';
+
+function loadAiSettings() {
+  const saved = localStorage.getItem('aiSettings');
+  if (saved) {
+    try { aiSettings = { ...aiSettings, ...JSON.parse(saved) }; } catch(e) {}
+  }
+  document.getElementById('ai-base-url').value = aiSettings.baseUrl;
+  document.getElementById('ai-api-key').value = aiSettings.apiKey;
+  document.getElementById('ai-model').value = aiSettings.model;
+  document.getElementById('ai-auto-fill').checked = aiSettings.autoFill;
+}
+
+function saveAiSettings() {
+  aiSettings.baseUrl = document.getElementById('ai-base-url').value.trim();
+  aiSettings.apiKey = document.getElementById('ai-api-key').value.trim();
+  aiSettings.model = document.getElementById('ai-model').value.trim();
+  aiSettings.autoFill = document.getElementById('ai-auto-fill').checked;
+  localStorage.setItem('aiSettings', JSON.stringify(aiSettings));
+  closeAiSettings();
+  showToast('success', 'AI设置已保存');
+}
+
+function openAiSettings() {
+  loadAiSettings();
+  document.getElementById('ai-settings-modal').classList.add('show');
+}
+
+function closeAiSettings() {
+  document.getElementById('ai-settings-modal').classList.remove('show');
+}
+
+async function testAiConnection() {
+  const baseUrl = document.getElementById('ai-base-url').value.trim();
+  const apiKey = document.getElementById('ai-api-key').value.trim();
+  const model = document.getElementById('ai-model').value.trim();
+  
+  if (!apiKey) { showToast('warning', '请先填写API Key'); return; }
+  
+  showToast('info', '正在测试连接...');
+  
+  try {
+    const response = await fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: model,
+        messages: [{ role: 'user', content: '你好，请回复"连接成功"' }],
+        max_tokens: 20
+      })
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      showToast('success', '✅ 连接成功！模型响应正常');
+    } else {
+      const err = await response.text();
+      showToast('warning', `连接失败：${response.status} ${err.slice(0,100)}`);
+    }
+  } catch (err) {
+    showToast('warning', `连接错误：${err.message}`);
+  }
+}
+
+async function aiAnalyzeProblem() {
+  // Check settings
+  if (!aiSettings.apiKey) {
+    loadAiSettings();
+    if (!aiSettings.apiKey) {
+      showToast('warning', '请先在顶部栏「⚙️ AI」中配置API Key');
+      openAiSettings();
+      return;
+    }
+  }
+  
+  // Get problem files
+  const files = await getAllFiles();
+  const problemFiles = files.filter(f => f.category === 'problem' && (f.type === 'application/pdf' || f.name.endsWith('.pdf')));
+  
+  if (problemFiles.length === 0) {
+    showToast('warning', '请先在「比赛题目」分类上传题目PDF');
+    return;
+  }
+  
+  // Show loading modal
+  const resultBody = document.getElementById('ai-result-body');
+  document.getElementById('ai-result-footer').style.display = 'none';
+  resultBody.innerHTML = `<div class="ai-analysis-loading">
+    <div class="ai-spinner"></div>
+    <div class="ai-loading-text">AI 正在分析题目，请稍候...</div>
+    <div class="ai-loading-step" id="ai-loading-step">步骤 1/3：提取题目文本</div>
+  </div>`;
+  document.getElementById('ai-result-modal').classList.add('show');
+  
+  try {
+    // Step 1: Extract text
+    let allText = '';
+    for (const f of problemFiles) {
+      const arrayBuffer = await f.blob.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      let fileText = `\n\n========== 文件：${f.name} ==========\n`;
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        fileText += textContent.items.map(item => item.str).join(' ');
+      }
+      allText += fileText;
+    }
+    
+    document.getElementById('ai-loading-step').textContent = '步骤 2/3：调用AI分析中...';
+    
+    // Step 2: Call AI
+    const prompt = `你是一位资深数学建模竞赛教练。请仔细阅读以下竞赛题目，完成结构化分析。
+
+题目内容：
+${allText.slice(0, 12000)}
+
+请按以下格式输出分析结果（使用Markdown格式）：
+
+## 一、问题类型
+判断本题属于哪类数学建模问题（如：优化类、评价类、预测类、分类类、机理分析类、统计分析类、图论/网络类、微分方程类等），并说明理由。
+
+## 二、核心问题拆解
+将题目拆解为2-4个子问题，每个子问题说明：
+- 子问题描述
+- 需要解决的关键矛盾
+- 输入和输出
+
+## 三、评价标准
+针对每个子问题，给出2-3条可量化的评价标准（如：误差率、运行时间、鲁棒性、可解释性等）。
+
+## 四、候选模型推荐
+为每个子问题推荐2-4个候选模型，每个模型说明：
+- 模型名称
+- 适用理由
+- 优缺点
+- 预计复杂度（低/中/高）
+
+## 五、关键约束与假设
+列出题目中的硬约束（必须满足）和建议的建模假设（需要明确说明）。
+
+## 六、数据需求
+列出解决本题需要哪些数据，题目已提供哪些，还需要补充哪些。
+
+## 七、整体解题思路
+用3-5句话概括整体的技术路线和各子问题之间的逻辑关系。`;
+
+    const response = await fetch(`${aiSettings.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${aiSettings.apiKey}`
+      },
+      body: JSON.stringify({
+        model: aiSettings.model,
+        messages: [
+          { role: 'system', content: '你是一位资深数学建模竞赛教练，擅长问题分析、模型选择和解题思路规划。输出要求结构化、条理清晰、可操作性强。' },
+          { role: 'user', content: prompt }
+        ],
+        temperature: 0.7,
+        max_tokens: 4000
+      })
+    });
+    
+    if (!response.ok) {
+      const err = await response.text();
+      throw new Error(`API错误 ${response.status}：${err.slice(0, 200)}`);
+    }
+    
+    const data = await response.json();
+    aiAnalysisResult = data.choices[0].message.content;
+    
+    document.getElementById('ai-loading-step').textContent = '步骤 3/3：渲染分析结果...';
+    
+    // Step 3: Show result
+    setTimeout(() => {
+      resultBody.innerHTML = `<div class="ai-result-body" style="font-size:12px;line-height:1.8;">${renderMarkdown(aiAnalysisResult)}</div>`;
+      document.getElementById('ai-result-footer').style.display = 'flex';
+      
+      // Auto fill if enabled
+      if (aiSettings.autoFill) {
+        applyAiToG1(true);
+      }
+    }, 500);
+    
+  } catch (err) {
+    console.error('AI analysis error:', err);
+    resultBody.innerHTML = `<div style="padding:40px;text-align:center;">
+      <div style="font-size:32px;margin-bottom:12px;">⚠️</div>
+      <div style="font-size:14px;color:var(--red);margin-bottom:8px;">分析失败</div>
+      <div style="font-size:12px;color:var(--text-secondary);">${err.message}</div>
+      <button class="ai-btn primary" style="margin-top:16px;" onclick="aiAnalyzeProblem()">重试</button>
+    </div>`;
+  }
+}
+
+function renderMarkdown(text) {
+  // Simple markdown renderer
+  let html = escapeHtml(text);
+  // Headers
+  html = html.replace(/^### (.+)$/gm, '<h4 style="font-size:13px;font-weight:700;color:var(--accent);margin:12px 0 6px;">$1</h4>');
+  html = html.replace(/^## (.+)$/gm, '<h3 style="font-size:14px;font-weight:700;color:var(--accent);margin:16px 0 8px;border-bottom:1px solid var(--border);padding-bottom:4px;">$1</h3>');
+  html = html.replace(/^# (.+)$/gm, '<h2 style="font-size:16px;font-weight:700;color:var(--text-primary);margin:16px 0 8px;">$1</h2>');
+  // Bold
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong style="color:var(--text-primary);">$1</strong>');
+  // Lists
+  html = html.replace(/^- (.+)$/gm, '<li style="margin:2px 0;">$1</li>');
+  html = html.replace(/(<li.*<\/li>\n?)+/g, '<ul style="padding-left:20px;margin:4px 0;">$&</ul>');
+  // Numbered lists
+  html = html.replace(/^\d+\. (.+)$/gm, '<li style="margin:2px 0;">$1</li>');
+  // Paragraphs
+  html = html.replace(/\n\n/g, '</p><p style="margin:6px 0;">');
+  html = '<p style="margin:6px 0;">' + html + '</p>';
+  return html;
+}
+
+function closeAiResult() {
+  document.getElementById('ai-result-modal').classList.remove('show');
+}
+
+function copyAiResult() {
+  navigator.clipboard.writeText(aiAnalysisResult).then(() => {
+    showToast('success', '分析结果已复制');
+  }).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = aiAnalysisResult;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+    showToast('success', '分析结果已复制');
+  });
+}
+
+function applyAiToG1(silent) {
+  // Store AI analysis result in G1's rationale or a dedicated field
+  if (state['g1']) {
+    state['g1'].aiAnalysis = aiAnalysisResult;
+    state['g1'].rationale = aiAnalysisResult.slice(0, 500) + (aiAnalysisResult.length > 500 ? '...' : '');
+  }
+  saveState();
+  renderDetail();
+  if (!silent) {
+    showToast('success', '分析结果已应用到G1面板');
+    closeAiResult();
+    selectGate('g1');
+  } else {
+    showToast('info', '分析结果已自动填充到G1面板');
+  }
+}
+
 // ===== Theme & Visual Enhancements =====
 let currentTheme = localStorage.getItem('theme') || 'dark';
 
@@ -1667,6 +2137,7 @@ function showSplash() {
 
 function init() {
   applyTheme(currentTheme);
+  loadAiSettings();
   initFileDB().then(() => {
     if (activeTab === 'files') renderFilePanel();
   }).catch(err => console.warn('File DB init failed:', err));
